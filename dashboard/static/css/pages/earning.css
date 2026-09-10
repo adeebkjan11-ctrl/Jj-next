@@ -1,0 +1,196 @@
+/*
+
+# This file is part of LazyFarmers.
+# Copyright (c) 2025-Present Routo
+#
+# LazyFarmers is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with LazyFarmers. If not, see <https://www.gnu.org/licenses/>.
+
+
+
+*/
+
+/* ── Aurora Glass · Earning View ─────────────────────────────────
+   The controls reuse the config view's row/stepper/toggle chrome
+   (.cfg-row, .cfg-stepper, .neura-toggle) so the two tabs read as one
+   surface. Only what earning genuinely adds lives here: the mode hero,
+   the per-row hint line, and the ledger table.
+   ──────────────────────────────────────────────────────────────── */
+
+/* ── card chrome ─────────────────────────────────────────────────
+   `.module-card` / `.security-stats-container` only carry glass styling
+   inside the security view, so the earning view has to dress its own
+   panels or the whole tab renders as bare text on the page background.
+   ──────────────────────────────────────────────────────────────── */
+#earning .module-card,
+#earning .security-stats-container {
+    position: relative;
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+}
+#earning .module-card::before,
+#earning .security-stats-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent-gradient);
+    opacity: 0.85;
+}
+/* the rows carry their own padding, so the card must not */
+#earning .module-header { padding: 20px 22px 0; }
+#earning .module-title { margin-bottom: 16px; }
+#earning .module-body { margin-bottom: 0; }
+
+/* ── state pill (shared by the hero and the ledger table) ───── */
+.earn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+.earn-pill::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+}
+.earn-pill.on {
+    color: var(--success);
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.35);
+}
+.earn-pill.paused {
+    color: var(--warning);
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.32);
+}
+.earn-pill.off {
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--border-soft);
+}
+.earn-pill.on::before { animation: earn-pulse 2s ease-in-out infinite; }
+@keyframes earn-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+/* ── rows: the config chrome plus a hint line ───────────────── */
+.earn-hint {
+    display: block;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    max-width: 62ch;
+}
+.earn-hint b { color: var(--text-main); font-weight: 600; }
+.earn-hint code {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-soft);
+    color: var(--accent-2);
+}
+
+/* the ledger row closes the card, so it carries the reset button */
+.earn-row-foot {
+    background: rgba(255, 255, 255, 0.015);
+    border-top: 1px solid var(--border-soft);
+}
+
+/* ── ledger table ──────────────────────────────────────────────
+   Chrome comes from .proxy-table / .proxy-table-wrap so this page looks like
+   the proxies page instead of inventing a second table style. Only the bits
+   the ledger adds live here. */
+.earn-table-wrap { margin-bottom: 26px; }
+.earn-table th,
+.earn-table td { text-align: right; vertical-align: top; }
+.earn-table th:first-child,
+.earn-table td:first-child { text-align: left; }
+.earn-table th:last-child,
+.earn-table td:last-child { text-align: center; }
+
+.earn-acc-name {
+    display: block;
+    font-family: var(--font-body);
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 5px;
+}
+.earn-sub {
+    display: block;
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    margin-top: 3px;
+    letter-spacing: 0.02em;
+}
+.earn-event {
+    font-family: var(--font-body);
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    max-width: 22ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.earn-num { font-variant-numeric: tabular-nums; }
+.earn-pos { color: var(--success); }
+.earn-neg { color: var(--rose); }
+.earn-dim { color: var(--text-dim); }
+.earn-net { font-weight: 700; font-size: 0.88rem; }
+
+/* the per-row reset is a quiet icon-scale action, not a second CTA */
+.earn-row-btn {
+    padding: 5px 12px;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+}
+
+@media (max-width: 720px) {
+    /* the mode row's control cluster drops under its label on a phone */
+    .earn-mode-control { width: 100%; justify-content: space-between; }
+    .earn-hint { max-width: none; }
+}
+
+/* ── earning mode row ──────────────────────────────────────────── */
+.earn-mode-control {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.earn-row-head {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+    margin-bottom: 4px;
+}
+
+/* the two section headings on this page follow the accounts page spacing */
+#earning .section-subtitle { margin-top: 26px; }
+#earning .accounts-page-hint { margin-bottom: 14px; }

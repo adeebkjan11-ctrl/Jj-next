@@ -1,0 +1,199 @@
+/*
+
+# This file is part of LazyFarmers.
+# Copyright (c) 2025-Present Routo
+#
+# LazyFarmers is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with LazyFarmers. If not, see <https://www.gnu.org/licenses/>.
+
+
+
+*/
+
+/* ── Aurora Glass · History View ─────────────────────────────── */
+
+.analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+    gap: 18px;
+    padding: 0 0 20px 0;
+    margin-bottom: 20px;
+}
+
+.analytics-card {
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+    transition: transform 0.2s, border-color 0.2s;
+}
+.analytics-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent-gradient);
+    opacity: 0.5;
+}
+.analytics-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--glass-border-strong);
+}
+.analytics-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-xs);
+    background: var(--accent-gradient-soft);
+    border: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+}
+.analytics-icon .icon-svg {
+    width: 22px;
+    height: 22px;
+    background-color: var(--accent);
+}
+.analytics-card .val {
+    font-family: var(--font-heading);
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.1;
+    margin-bottom: 4px;
+}
+.analytics-card .lbl {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.history-date-picker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.history-range-sep {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+}
+
+.session-select,
+.field-input {
+    background: rgba(7, 8, 16, 0.6);
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    border-radius: var(--radius-xs);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.session-select:focus,
+.field-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.chart-empty-msg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-family: var(--font-mono);
+}
+
+.chart-container {
+    height: 250px;
+    width: 100%;
+    position: relative;
+}
+.chart-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+.chart-box {
+    min-height: 320px;
+}
+
+/* ── per-account breakdown ───────────────────────────────────── */
+
+.per-account-wrap {
+    /* bounded and scrollable: a space can hold 25 accounts, and the panel must
+       not grow the page every time another one starts farming */
+    max-height: 320px;
+    overflow-y: auto;
+    margin-top: 8px;
+}
+.per-account-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+}
+.per-account-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: rgba(7, 8, 16, 0.95);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-align: right;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+}
+.per-account-table th:first-child,
+.per-account-table td:first-child {
+    text-align: left;
+}
+.per-account-table td {
+    text-align: right;
+    padding: 9px 12px;
+    color: var(--text-main);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    white-space: nowrap;
+}
+.per-account-table tbody tr:hover td {
+    background: rgba(255, 255, 255, 0.03);
+}
+.per-account-empty {
+    text-align: center !important;
+    color: var(--text-muted);
+    padding: 24px 12px !important;
+}
+.per-account-live {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(0, 209, 110, 0.14);
+    border: 1px solid rgba(0, 209, 110, 0.4);
+    color: #00d16e;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+}
+.per-account-unassigned {
+    color: var(--text-muted);
+    font-style: italic;
+}

@@ -1,0 +1,14 @@
+# git: discord.py-self installs from a pinned commit
+# libgomp1: onnxruntime needs it at runtime
+# tesseract-ocr: pytesseract is only a wrapper - without the binary the level-card
+#                OCR fallback in modules/level_ocr.py can never run, so an image
+#                level card leaves the dashboard blank
+# chromium: modules/browser_solver.py hosts NopeCHA's extension in a real browser
+#           over CDP. With no browser on the box find_browser() returns nothing and
+#           the extension solve can never run - which is exactly why it never fired
+#           on this deploy. Chromium (not Chrome) because Chrome 137+ refuses to
+#           load unpacked extensions under automation.
+# "..." keeps the packages Nixpacks picks by itself
+[phases.setup]
+nixPkgs = ["...", "git"]
+aptPkgs = ["...", "libgomp1", "tesseract-ocr", "chromium"]

@@ -1,0 +1,162 @@
+# ===============================
+# Python cache & bytecode
+# ===============================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# ===============================
+# Distribution / packaging
+# ===============================
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ===============================
+# Sensitive / local data
+# ===============================
+
+tokens.txt
+*.local
+
+# dashboard logins (holds emails and plaintext passwords) and per-account settings
+config/dashboard_users.json
+config/dashboard_users.json.tmp
+config/settings_*.json
+sc_stdout.txt
+
+# admin credentials - copy config/auth.example.json to config/auth.json to set up
+config/auth.json
+# flask session signing key, generated on first boot
+config/secret.key
+# pre-spaces leftovers; accounts and proxies now live in data/users/<owner>/
+config/accounts.json
+config/proxies.json
+config/*.migrated
+
+# per-user spaces: tokens, proxies, settings and history
+data/users/
+
+# per-account runtime state written into the data root at boot. Only
+# data/neura_quotes.json is shipped content; everything else here is generated
+# and account-specific (stats.json carries discord ids and cash totals).
+data/stats.json
+data/stats_daily.json
+data/stats_cookie.json
+data/boss_state.json
+data/cp_state_*.json
+data/giveaway_db*.json
+data/history.json
+data/neura_history.db
+data/setup.log
+# the runtime log and its rotation - carries account names and everything the
+# dashboard log view shows, so it is generated output, not something to commit
+data/neura.log
+data/neura.log.*
+data/clean_shutdown
+data/neura_crash.log
+
+# ===============================
+# Virtual environments
+# ===============================
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+.env/
+.env.*
+.virtualenv/
+
+# ===============================
+# PyInstaller
+# ===============================
+dist/
+
+# ===============================
+# Dependency managers
+# ===============================
+Pipfile.lock
+poetry.lock
+
+# ===============================
+# Type checkers
+# ===============================
+.pyre/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# ===============================
+# Testing & coverage
+# ===============================
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.cache/
+.pytest_cache/
+junit-*.xml
+
+# ===============================
+# Documentation
+# ===============================
+docs/_build/
+
+# ===============================
+# IDEs & Editors
+# ===============================
+.idea/
+.vscode/
+*.code-workspace
+
+# ===============================
+# OS files
+# ===============================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ===============================
+# Backups & temp files
+# ===============================
+*.bak
+*.swp
+*~
+*.log
+
+# ===============================
+# Jupyter
+# ===============================
+.ipynb_checkpoints/
+
+# ===============================
+# Databases
+# ===============================
+*.sqlite
+*.sqlite3
+*.db

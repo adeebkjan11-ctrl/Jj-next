@@ -1,0 +1,35 @@
+discord.py-self @ git+https://github.com/dolfies/discord.py-self@20ae80b398ec83fa272f0a96812140e14868c88
+Flask==2.3.0
+# Flask 2.3 declares no upper bound, so a bare install pulls Werkzeug 3.x and
+# drops APIs it still uses. Keep it on the line Flask 2.3 was built against.
+Werkzeug>=2.3.0,<3
+# the dashboard was served by werkzeug's development server, which is single
+# process and explicitly not for production - a deploy with several tabs polling
+# it stalled. waitress is a real WSGI server, pure python, no build step.
+# Deliberately not in setup_engine.verify_imports(): that list gates an
+# os.execv re-exec, and neura.py falls back to werkzeug when waitress is absent.
+waitress>=2.1.2
+requests==2.31.0
+# a hard == pin has no wheel on Python 3.13+ and the source build fails, so
+# `pip install -r requirements.txt` dies on any current interpreter. discord.py
+# needs <4; anything from here up is fine.
+aiohttp>=3.12.15,<4
+rich==14.2.0
+plyer==2.1.0
+playsound3==3.3.0
+python-dotenv==1.2.1
+aiohttp-socks==0.10.1
+nopecha
+numpy
+pillow
+onnxruntime
+# pytesseract is only a *wrapper*. `owo level` is answered with a rendered picture, so
+# reading the level number needs the Tesseract engine itself installed as well:
+#   Windows  https://github.com/UB-Mannheim/tesseract/wiki  (the installer does not add
+#            it to PATH; modules/level_ocr.py looks in the default install folders, or
+#            set LAZYFARMERS_TESSERACT to the full path of tesseract.exe)
+#   Debian   apt install tesseract-ocr
+#   macOS    brew install tesseract
+# Without it nothing breaks - the dashboard shows OwO's own level card instead of the
+# number, and says so in the log.
+pytesseract

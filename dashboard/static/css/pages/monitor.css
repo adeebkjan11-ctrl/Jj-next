@@ -1,0 +1,11 @@
+.monitor-setup { margin: 16px 0 24px; padding: 18px; border: 1px solid rgba(130,140,255,.3); border-left: 4px solid #5865f2; border-radius: 12px; background: rgba(88,101,242,.07); }
+.monitor-setup summary { cursor: pointer; font-weight: 700; font-size: 1.05rem; }
+.monitor-setup p { line-height: 1.6; margin: 14px 0; opacity: .85; }
+.monitor-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.monitor-form label { display: flex; flex-direction: column; gap: 7px; }
+.monitor-form input:not([type=checkbox]), .monitor-form select { width: 100%; min-height: 42px; border: 1px solid #52566d; border-radius: 7px; padding: 9px; background: #20212c; color: #fff; }
+.monitor-form input[type=checkbox] { width: 20px; height: 20px; }
+.monitor-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+#monitor-progress, #monitor-summary { padding: 12px 0; line-height: 1.6; overflow-wrap: anywhere; }
+#monitor-results { max-height: 300px; overflow: auto; }
+@media(max-width:600px) { .monitor-form { grid-template-columns: 1fr; } }

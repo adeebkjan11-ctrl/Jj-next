@@ -1,0 +1,111 @@
+/*
+
+# This file is part of LazyFarmers.
+# Copyright (c) 2025-Present Routo
+#
+# LazyFarmers is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with LazyFarmers. If not, see <https://www.gnu.org/licenses/>.
+
+
+
+*/
+
+/* ── Aurora Glass · Proxies View ─────────────────────────────── */
+
+.proxy-stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+.proxy-stat-card {
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 18px 16px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.15s;
+    box-shadow: var(--shadow-card);
+}
+.proxy-stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent-gradient);
+    opacity: 0.6;
+}
+.proxy-stat-card:hover {
+    border-color: var(--glass-border-strong);
+    transform: translateY(-2px);
+}
+.proxy-stat-card span {
+    display: block;
+    font-size: 1.6rem;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 4px;
+}
+.proxy-stat-card.ok span {
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.proxy-stat-card label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 600;
+}
+
+.proxy-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.proxy-bulk-panel {
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 18px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-card);
+}
+.proxy-bulk-textarea {
+    width: 100%;
+    min-height: 120px;
+    background: rgba(7, 8, 16, 0.6);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 12px;
+    margin: 8px 0 12px;
+    resize: vertical;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.proxy-bulk-textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.proxy-bulk-result { margin-top: 10px; font-size: 0.85rem; }
+.proxy-bulk-ok { color: var(--success); }
+.proxy-bulk-err { color: var(--warning); margin-top: 6px; }

@@ -1,0 +1,159 @@
+/*
+
+# This file is part of LazyFarmers.
+# Copyright (c) 2025-Present Routo
+#
+# LazyFarmers is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# You should have received a copy of the GNU General Public License
+# along with LazyFarmers. If not, see <https://www.gnu.org/licenses/>.
+
+
+
+*/
+
+/* ── Aurora Glass · Users View ───────────────────────────────── */
+
+.users-genbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 18px;
+    box-shadow: var(--shadow-card);
+}
+.users-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 120px;
+}
+.users-field.wide {
+    flex: 1;
+    min-width: 200px;
+}
+.users-field span {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    font-weight: 600;
+}
+
+.users-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+}
+.users-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xs);
+    padding: 14px 18px;
+    transition: border-color 0.2s, transform 0.15s;
+    box-shadow: var(--shadow-card);
+}
+.users-card:hover {
+    border-color: var(--glass-border-strong);
+    transform: translateY(-1px);
+}
+.users-card.off { opacity: 0.55; }
+.users-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+}
+.users-card-info strong {
+    font-size: 0.95rem;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.users-card-info .dim {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+}
+.users-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.users-badge {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.users-badge.fresh {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+.users-badge.used {
+    background: rgba(136, 146, 168, 0.12);
+    color: var(--text-muted);
+    border: 1px solid rgba(136, 146, 168, 0.3);
+}
+.users-badge.revoked {
+    background: rgba(251, 113, 133, 0.14);
+    color: var(--rose);
+    border: 1px solid rgba(251, 113, 133, 0.4);
+}
+
+.users-link {
+    font-size: 0.72rem;
+    color: var(--accent);
+    word-break: break-all;
+    text-decoration: none;
+}
+.users-link:hover { text-decoration: underline; }
+.users-secret {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.users-pw {
+    color: var(--text-main);
+    letter-spacing: 1px;
+}
+
+@media (max-width: 768px) {
+    .users-card {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .users-card-actions {
+        justify-content: flex-end;
+    }
+    .users-genbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

@@ -1,0 +1,35 @@
+/* Monitor uses the dashboard's Aurora Glass design tokens. */
+.monitor-heading, .monitor-card-heading { display: flex; align-items: center; gap: 12px; }
+.monitor-heading { justify-content: space-between; flex-wrap: wrap; }
+.monitor-badge { padding: 8px 14px; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent); border: 1px solid var(--glass-border); font-size: 12px; font-weight: 600; }
+.monitor-badge[data-state="error"] { color: var(--danger); background: var(--bg-glass); }
+.monitor-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+.monitor-metric, .monitor-card { background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: var(--radius); box-shadow: var(--shadow-card); backdrop-filter: var(--glass-blur); min-width: 0; }
+.monitor-metric { padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+.monitor-metric-label { color: var(--text-muted); font-size: 12px; }
+.monitor-metric-value { font-family: var(--font-heading); font-size: clamp(20px, 2.2vw, 30px); color: var(--text-main); overflow-wrap: anywhere; }
+.monitor-metric:last-child .monitor-metric-value { color: var(--accent); }
+.monitor-metric-note { color: var(--text-muted); font-size: 11px; overflow-wrap: anywhere; }
+.monitor-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.monitor-card { padding: 24px; }
+.monitor-card h2 { margin: 0; color: var(--text-main); font: 600 18px var(--font-heading); }
+.monitor-step { width: 32px; height: 32px; display: grid; place-items: center; flex-shrink: 0; border-radius: var(--radius-xs); background: var(--accent-gradient-soft); color: var(--accent); font: 600 12px var(--font-mono); }
+.monitor-hint { color: var(--text-muted); font-size: 12px; line-height: 1.7; margin: 14px 0; }
+.monitor-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.monitor-form > label { color: var(--text-muted); font-size: 12px; font-weight: 500; }
+.monitor-form .cfg-input { width: 100%; min-width: 0; margin: 0; }
+.monitor-form .monitor-hint { margin: 0 0 8px; }
+.monitor-form .monitor-toggle { display: flex; align-items: center; gap: 10px; min-height: 36px; }
+.monitor-toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+.monitor-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.monitor-card .btn-control { min-height: 42px; white-space: normal; text-align: center; justify-content: center; text-decoration: none; }
+.monitor-card [hidden] { display: none !important; }
+.monitor-activity { margin-top: 20px; }
+#monitor-progress { padding: 14px 16px; margin-top: 16px; background: var(--bg-glass); border: 1px solid var(--glass-border); border-radius: var(--radius-xs); font-size: 13px; color: var(--text-muted); line-height: 1.6; overflow-wrap: anywhere; }
+#monitor-progress[data-state="error"] { color: var(--danger); }
+#monitor-results { max-height: 300px; overflow: auto; }
+#monitor-results p { padding: 12px 0; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }
+.account-channel-options { margin: 16px 0; padding: 12px; border: 1px solid var(--glass-border); border-radius: var(--radius-xs); }
+.account-channel-options summary { cursor: pointer; color: var(--text-muted); font-size: 12px; }
+@media (max-width: 1000px) { .monitor-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .monitor-layout { grid-template-columns: minmax(0, 1fr); } .monitor-card { padding: 18px; } .monitor-metrics { gap: 10px; } .monitor-metric { padding: 14px; } .monitor-actions .btn-control { flex: 1 1 180px; } }

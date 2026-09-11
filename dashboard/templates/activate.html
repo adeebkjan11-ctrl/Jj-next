@@ -1,0 +1,479 @@
+<!--
+  This file is part of LazyFarmers.
+  Copyright (c) 2025-Present Routo
+
+  LazyFarmers is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  You should have received a copy of the GNU General Public License
+  along with LazyFarmers. If not, see <https://www.gnu.org/licenses/>.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Lazy Farmers — Activate</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --accent: #10b981;
+            --accent-2: #06b6d4;
+            --accent-soft: rgba(16, 185, 129, 0.14);
+            --accent-glow: rgba(16, 185, 129, 0.45);
+            --accent-gradient: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+            --bg-dark: #070810;
+            --bg-card: rgba(20, 24, 38, 0.6);
+            --bg-elev: rgba(30, 36, 54, 0.6);
+            --text-main: #eef1f8;
+            --text-muted: #8892a8;
+            --text-dim: #565f76;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-soft: rgba(255, 255, 255, 0.05);
+            --success: #10b981;
+            --danger: #fb7185;
+            --mono: 'JetBrains Mono', monospace;
+            --sans: 'Inter', sans-serif;
+            --radius: 20px;
+        }
+
+        html,
+        body {
+            min-height: 100%;
+            width: 100%;
+            background:
+                radial-gradient(900px 600px at 18% -10%, rgba(16, 185, 129, 0.10), transparent 60%),
+                radial-gradient(700px 500px at 100% 100%, rgba(6, 182, 212, 0.08), transparent 55%),
+                var(--bg-dark);
+            font-family: var(--sans);
+            color: var(--text-main);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── aurora orbs ── */
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: 0;
+            pointer-events: none;
+            animation: orbDrift 18s ease-in-out infinite alternate;
+        }
+        body::before {
+            width: 420px; height: 420px;
+            top: -120px; right: -100px;
+            background: rgba(16, 185, 129, 0.12);
+        }
+        body::after {
+            width: 380px; height: 380px;
+            bottom: -120px; left: -80px;
+            background: rgba(6, 182, 212, 0.10);
+            animation-delay: -9s;
+        }
+        @keyframes orbDrift {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(40px, 30px) scale(1.15); }
+        }
+
+        .wrapper {
+            position: relative;
+            z-index: 2;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 24px 16px;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 420px;
+            padding: 42px 40px 34px;
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(1.3);
+            -webkit-backdrop-filter: blur(24px) saturate(1.3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            position: relative;
+            box-shadow:
+                0 24px 60px -20px rgba(0, 0, 0, 0.6),
+                0 2px 0 0 rgba(255, 255, 255, 0.03) inset;
+            transition: border-color 0.6s ease, box-shadow 0.6s ease;
+            overflow: hidden;
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: var(--accent-gradient);
+            opacity: 0.6;
+        }
+
+        .card .corner-br,
+        .card .corner-bl {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-color: var(--accent);
+            border-style: solid;
+            opacity: 0.55;
+            border-radius: 1px;
+        }
+
+        .card .corner-br {
+            bottom: -1px;
+            right: -1px;
+            border-width: 0 2px 2px 0;
+            border-bottom-right-radius: var(--radius);
+        }
+
+        .card .corner-bl {
+            bottom: -1px;
+            left: -1px;
+            border-width: 0 0 2px 2px;
+            border-bottom-left-radius: var(--radius);
+        }
+
+        .card__title {
+            font-family: var(--mono);
+            font-size: clamp(1.1rem, 4vw, 1.45rem);
+            font-weight: 600;
+            color: var(--text-main);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .card__sub {
+            font-family: var(--mono);
+            font-size: 0.66rem;
+            color: var(--text-dim);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .msg {
+            font-family: var(--mono);
+            font-size: 0.78rem;
+            letter-spacing: 0.5px;
+            text-align: center;
+            margin-bottom: 18px;
+            display: none;
+        }
+
+        .msg.error {
+            color: var(--danger);
+            display: block;
+        }
+
+        .msg.ok {
+            color: var(--success);
+            display: block;
+        }
+
+        .field {
+            position: relative;
+            margin-bottom: 26px;
+        }
+
+        .field input {
+            width: 100%;
+            padding: 14px 0 8px;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-main);
+            font-family: var(--sans);
+            font-size: 0.95rem;
+            outline: none;
+            caret-color: var(--accent);
+            transition: border-color 0.3s ease;
+        }
+
+        .field input#key {
+            font-family: var(--mono);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .field label {
+            position: absolute;
+            left: 0;
+            top: 14px;
+            font-family: var(--mono);
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            letter-spacing: 0.5px;
+            pointer-events: none;
+            transition: top 0.25s ease, font-size 0.25s ease, color 0.25s ease;
+        }
+
+        .field input:focus+label,
+        .field input:not(:placeholder-shown)+label {
+            top: -6px;
+            font-size: 0.66rem;
+            color: var(--accent);
+            letter-spacing: 1px;
+        }
+
+        .field input:focus {
+            border-bottom-color: var(--accent);
+            box-shadow: 0 6px 10px -8px var(--accent-glow);
+        }
+
+        .field-hint {
+            font-family: var(--mono);
+            font-size: 0.62rem;
+            color: var(--text-dim);
+            letter-spacing: 0.5px;
+            margin-top: 6px;
+        }
+
+        #activateBtn {
+            width: 100%;
+            padding: 13px;
+            margin-top: 4px;
+            background: var(--accent-gradient);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-family: var(--mono);
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            box-shadow: 0 6px 24px -8px var(--accent-glow);
+            transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease, filter 0.2s ease;
+        }
+
+        #activateBtn:hover {
+            box-shadow: 0 10px 32px -8px var(--accent-glow);
+            filter: brightness(1.1);
+        }
+
+        #activateBtn:active {
+            transform: scale(0.97);
+            filter: brightness(0.95);
+        }
+
+        .alt-link {
+            margin-top: 22px;
+            text-align: center;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            letter-spacing: 0.5px;
+        }
+
+        .alt-link a {
+            color: var(--text-muted);
+            text-decoration: none;
+            border-bottom: 1px dashed var(--border);
+            padding-bottom: 2px;
+            transition: color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .alt-link a:hover {
+            color: var(--accent);
+            border-bottom-color: var(--accent-soft);
+        }
+
+        .card.success {
+            border-color: rgba(16, 185, 129, 0.45);
+            box-shadow:
+                0 24px 60px -20px rgba(0, 0, 0, 0.6),
+                0 0 40px rgba(16, 185, 129, 0.15);
+        }
+
+        .card.success .corner-br,
+        .card.success .corner-bl {
+            border-color: var(--success);
+            opacity: 0.7;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            20% {
+                transform: translateX(-8px);
+            }
+
+            40% {
+                transform: translateX(8px);
+            }
+
+            60% {
+                transform: translateX(-5px);
+            }
+
+            80% {
+                transform: translateX(5px);
+            }
+        }
+
+        .card.shake {
+            animation: shake 0.4s ease;
+        }
+
+        @media (max-width: 480px) {
+            .card {
+                padding: 32px 22px 28px;
+            }
+        }
+    </style>
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="card" id="card">
+            <span class="corner-br"></span>
+            <span class="corner-bl"></span>
+
+            <h1 class="card__title">Activate Access</h1>
+            <p class="card__sub" id="sub">Enter your activation key</p>
+            <div class="msg" id="msg"></div>
+
+            <form id="activateForm">
+                <div class="field">
+                    <input type="text" id="key" placeholder=" " required autocomplete="off" spellcheck="false">
+                    <label for="key">Activation Key</label>
+                    <div class="field-hint" id="keyHint"></div>
+                </div>
+                <div class="field">
+                    <input type="email" id="email" placeholder=" " required autocomplete="email">
+                    <label for="email">Email</label>
+                </div>
+                <div class="field">
+                    <input type="password" id="password" placeholder=" " required autocomplete="new-password">
+                    <label for="password">Password</label>
+                    <div class="field-hint">At least 6 characters</div>
+                </div>
+                <div class="field">
+                    <input type="password" id="confirm" placeholder=" " required autocomplete="new-password">
+                    <label for="confirm">Confirm Password</label>
+                </div>
+                <button type="submit" id="activateBtn">Create Account</button>
+            </form>
+            <p class="alt-link"><a href="/login">Already have an account? Sign in</a></p>
+        </div>
+    </div>
+
+    <script>
+        const card = document.getElementById('card');
+        const msg = document.getElementById('msg');
+        const btn = document.getElementById('activateBtn');
+        const keyInput = document.getElementById('key');
+        const keyHint = document.getElementById('keyHint');
+
+        function showError(text) {
+            msg.textContent = text;
+            msg.className = 'msg error';
+            card.classList.remove('shake');
+            void card.offsetWidth;
+            card.classList.add('shake');
+        }
+
+        // the admin's link carries the key, so prefill it and confirm it up front
+        const fromLink = new URLSearchParams(window.location.search).get('key');
+        if (fromLink) {
+            keyInput.value = fromLink;
+            checkKey();
+        }
+
+        keyInput.addEventListener('blur', checkKey);
+
+        function checkKey() {
+            const key = keyInput.value.trim();
+            if (!key) return;
+            fetch('/api/users/key_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        keyHint.textContent = `Valid key — ${data.days} day${data.days === 1 ? '' : 's'} of access`;
+                        keyHint.style.color = 'rgba(16, 185, 129, 0.85)';
+                    } else {
+                        keyHint.textContent = data.error || 'Key not valid';
+                        keyHint.style.color = 'rgba(251, 113, 133, 0.85)';
+                    }
+                })
+                .catch(() => { });
+        }
+
+        document.getElementById('activateForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const key = keyInput.value.trim();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const confirm = document.getElementById('confirm').value;
+
+            if (password !== confirm) {
+                showError('Passwords do not match');
+                return;
+            }
+
+            btn.textContent = 'Activating…';
+            btn.style.pointerEvents = 'none';
+            msg.className = 'msg';
+
+            fetch('/activate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, email, password, confirm })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        card.classList.add('success');
+                        msg.textContent = `Account created — ${data.days_left} days of access`;
+                        msg.className = 'msg ok';
+                        btn.textContent = 'Access Granted';
+                        setTimeout(() => { window.location.href = '/'; }, 1600);
+                    } else {
+                        btn.textContent = 'Create Account';
+                        btn.style.pointerEvents = 'auto';
+                        showError(data.error || 'Activation failed');
+                    }
+                })
+                .catch(() => {
+                    btn.textContent = 'Create Account';
+                    btn.style.pointerEvents = 'auto';
+                    showError('Connection Error');
+                });
+        });
+    </script>
+</body>
+
+</html>

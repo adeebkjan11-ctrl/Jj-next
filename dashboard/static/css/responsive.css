@@ -1,0 +1,241 @@
+/* ── Aurora Glass · Responsive ───────────────────────────────── */
+
+@media (max-width: 1200px) {
+    .charts-row-top { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+    #config.view.active-view { height: auto; max-height: none; overflow: visible; }
+    .cfg-layout { grid-template-columns: 1fr; overflow: visible; }
+    .cfg-sidebar { height: auto; max-height: 200px; }
+    .cfg-main { height: auto; max-height: none; overflow: visible; }
+    .cfg-nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .cfg-nav-item { width: auto; flex: 0 1 auto; font-size: 0.75rem; padding: 8px 12px; }
+    .cfg-nav-item::before { display: none !important; }
+    .cfg-nav-item .cfg-nav-hint { display: none; }
+}
+
+@media (max-width: 768px) {
+    /* ── Topbar: full width on mobile ── */
+    .top-bar-fixed {
+        left: 12px;
+        right: 12px;
+        height: 52px;
+        padding: 0 14px;
+    }
+    .top-bar-fixed .account-name-display {
+        font-size: 0.7rem;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .mobile-menu-toggle { display: flex !important; }
+
+    /* ── Sidebar: slide-in drawer on mobile ── */
+    .sidebar {
+        width: 248px;
+        position: fixed;
+        top: 0;
+        left: -280px;
+        height: 100vh;
+        background: rgba(10, 12, 20, 0.92);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border-right: 1px solid var(--glass-border-strong);
+        z-index: 1200;
+        transition: left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        flex-direction: column;
+        padding: 60px 16px 20px;
+        overflow-y: auto;
+        margin-top: 0;
+    }
+    .sidebar.active { left: 0; box-shadow: 12px 0 48px rgba(0, 0, 0, 0.5); }
+    .sidebar:hover { width: 248px; }
+    /* On mobile, always show nav text (drawer is full-width) */
+    .sidebar .nav-item { font-size: 0.9rem !important; }
+    .sidebar .brand-main,
+    .sidebar .brand-sub { opacity: 1 !important; }
+    /* trimmed to leave room for the close button pinned at the row's right edge -
+       at the desktop size the wordmark ran underneath it */
+    .sidebar .brand-main { font-size: 1em; letter-spacing: 1px; }
+    /* min-width/overflow are the safety net: on a short phone the drawer grows a
+       scrollbar, which narrows the row by ~9px - without them the wordmark would
+       creep under the close button instead of clipping */
+    .sidebar .brand-sub { font-size: 0.7em; letter-spacing: 1px; min-width: 0; overflow: hidden; }
+    .sidebar .status-indicator { font-size: 0.78rem !important; }
+    .sidebar .space-label { font-size: 0.72rem !important; }
+    .sidebar .version { font-size: 0.72rem !important; }
+    .sidebar-overlay.active { display: block; }
+
+    /* Reachable now that the drawer paints above the scrim - so it needs to be big
+       enough to actually hit. Unstyled it rendered as a 10x19px glyph. Pinned rather
+       than pushed with margin-left:auto: the brand row's img + wordmark already fill
+       the line, so there is no free space for an auto margin to eat and the button
+       ended up overflowing into .brand's overflow:hidden clip. */
+    .brand {
+        position: relative;
+        padding-right: 46px;
+        gap: 6px;
+    }
+    .mobile-sidebar-close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        right: 0;
+        top: 4px;
+        width: 40px;
+        height: 40px;
+        font-size: 1.6rem;
+        line-height: 1;
+        color: var(--text-dim);
+        background: var(--bg-glass);
+        border: 1px solid var(--glass-border);
+        border-radius: 50%;
+        cursor: pointer;
+        transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .mobile-sidebar-close:active {
+        color: var(--text-main);
+        border-color: var(--glass-border-strong);
+        transform: scale(0.92);
+    }
+
+    .top-controls { display: none !important; }
+
+    .content-area {
+        padding: 74px 14px 24px 14px;
+        margin-left: 0;
+        min-height: 0;
+        height: 100%;
+    }
+
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { padding: 14px; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 90px; }
+    .kpi-icon { width: 44px; height: 44px; font-size: 18px; }
+    .kpi-data h3 { font-size: 0.72rem; }
+    .kpi-data p { font-size: 1.4rem; }
+
+    .charts-row-top, .charts-row-bottom { flex-direction: column; height: auto !important; padding: 0 !important; }
+    .charts-row-top > div, .charts-row-bottom > div { width: 100% !important; min-height: 250px !important; margin-bottom: 15px; }
+
+    .analytics-grid { grid-template-columns: 1fr !important; padding: 0 !important; gap: 14px; }
+
+    .terminal-window { height: 400px !important; padding: 14px; font-size: 0.85rem; }
+
+    .btn-control { padding: 7px 14px; font-size: 0.78rem; min-height: 36px; }
+    .btn-control .icon-svg { width: 16px; height: 16px; }
+    .btn-control .btn-text { display: inline; }
+
+    .cfg-toolbar { flex-direction: column; align-items: stretch; }
+    .cfg-search-box { min-width: auto; }
+    .cfg-search-input { padding: 10px 36px 10px 38px; font-size: 0.85rem; }
+    .cfg-save-btn { width: 100%; justify-content: center; }
+
+    .account-config-card { flex-direction: column; align-items: stretch; gap: 8px; }
+    .account-config-actions { justify-content: flex-end; }
+
+    .proxy-stats-bar { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .proxy-stat-card { padding: 12px; }
+    .proxy-stat-card span { font-size: 1.2rem; }
+
+    .mobile-top-controls {
+        display: none !important;
+        gap: 6px;
+        position: fixed;
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(10, 12, 20, 0.88);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        padding: 8px 14px;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--glass-border);
+        z-index: 999;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    }
+    .mobile-control-btn {
+        width: 42px;
+        height: 42px;
+        background: var(--bg-glass);
+        border: 1px solid var(--glass-border);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        -webkit-tap-highlight-color: transparent;
+    }
+    .mobile-control-btn:active {
+        transform: scale(0.92);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+    }
+    .mobile-control-btn.green {
+        border-color: var(--success);
+        color: var(--success);
+        background: rgba(16, 185, 129, 0.08);
+    }
+    .mobile-control-btn.red {
+        border-color: var(--rose);
+        color: var(--rose);
+        background: rgba(251, 113, 133, 0.08);
+    }
+    .mobile-control-btn.gold {
+        border-color: var(--warning);
+        color: var(--warning);
+        background: rgba(245, 158, 11, 0.08);
+    }
+    .mobile-control-btn:hover { border-color: var(--glass-border-strong); }
+
+    .mobile-control-panel {
+        bottom: 20px;
+        padding: 10px 16px;
+        gap: 12px;
+        min-width: 160px;
+    }
+    .mobile-control-panel .mobile-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 1.1rem;
+    }
+    .mobile-control-panel .mobile-btn .icon-svg {
+        width: 20px;
+        height: 20px;
+    }
+}
+
+@media (max-width: 600px) {
+    .cfg-row { flex-direction: column; align-items: stretch; gap: 12px; }
+    .cfg-range-pair { grid-template-columns: 1fr; }
+    .cfg-toolbar { flex-direction: column; }
+    .cfg-save-btn { width: 100%; }
+}
+
+@media (max-width: 480px) {
+    .top-bar-fixed { height: 48px; left: 8px; right: 8px; }
+    .top-bar-fixed .account-name-display { font-size: 0.65rem; max-width: 80px; }
+    .content-area { padding: 68px 10px 20px 10px; }
+    .kpi-grid { grid-template-columns: 1fr; }
+    .kpi-card { padding: 12px; }
+    .proxy-stats-bar { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+    .content-area { padding-top: 64px; }
+    .top-bar-fixed { left: 8px; right: 8px; height: 50px; padding: 8px 14px; }
+    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    .sidebar { width: 248px; }
+    .charts-row-top { flex-direction: row !important; height: 250px !important; }
+    .charts-row-top > div { height: 100% !important; }
+}
+
+@media (max-width: 280px) {
+    .brand-main { font-size: 1em; }
+    .brand-sub { font-size: 0.6em; }
+}

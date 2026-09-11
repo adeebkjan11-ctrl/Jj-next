@@ -1,0 +1,20 @@
+name: Offline regression tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install 'aiohttp>=3.12.15,<4'
+      - run: python -m unittest discover -s tests -v
+      - run: python -m compileall -q core cogs dashboard modules tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check dashboard/static/js/monitor.js && node --check dashboard/static/js/security.js
+      - run: node tests/monitor_frontend.cjs

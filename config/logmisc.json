@@ -1,0 +1,40 @@
+{
+  "colors": {
+    "SYS": "#00ffff",
+    "CMD": "#00ff00",
+    "INFO": "#0099ff",
+    "SUCCESS": "#00ff00",
+    "COOLDOWN": "#ffff00",
+    "ALARM": "#ff0000",
+    "ERROR": "#ff0000",
+    "WARN": "#ffaa00",
+    "DEBUG": "#888888",
+    "SECURITY": "#ff0000",
+    "SEC": "#ff0000",
+    "AutoHunt": "#00ffff",
+    "BOSS": "#ff8800",
+    "GAMBLING": "#c084fc",
+    "STEALTH": "#ffd400",
+    "SHOP": "#f1c40f",
+    "TEAM": "#22d3ee",
+    "WEAPON": "#f97316",
+    "USERS": "#a855f7"
+  },
+  "commands": {
+    "hunt": "#ff1f1f",
+    "battle": "#3b82f6",
+    "curse": "#9b59b6",
+    "huntbot": "#00ff88",
+    "daily": "#f1c40f",
+    "cookie": "#e91e63",
+    "owo": "#ffffff",
+    "cf": "#3498db",
+    "slots": "#e74c3c",
+    "rpp": "#1abc9c",
+    "team": "#22d3ee",
+    "weapon": "#f97316",
+    "zoo": "#22d3ee",
+    "level": "#a855f7",
+    "cash": "#f1c40f"
+  }
+}

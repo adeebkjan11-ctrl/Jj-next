@@ -28,7 +28,7 @@ function renderMonitorConfig() {
     panel.textContent = error || `${runtime} · ${cfg.guild_name || 'No server selected'}${op.kind ? ` · ${op.kind}: ${op.status}` : ''}${op.stage ? ` · ${op.stage} ${op.done || 0}/${op.total || 0}` : ''}`;
     if (op.kind === 'provision' && op.result && !error) {
         const result = op.result;
-        panel.textContent = `${result.accounts} assigned · ${result.failed || 0} failed · ${result.duplicates_removed || 0} duplicates removed · ${result.channels} channels`;
+        panel.textContent = `${result.accounts} assigned · ${result.awaiting || 0} waiting for a first connection · ${result.failed || 0} failed · ${result.duplicates_removed || 0} duplicates removed · ${result.channels} channels`;
         panel.dataset.state = result.failed ? 'warning' : 'normal';
     }
     const badge = document.getElementById('monitor-status');
@@ -56,7 +56,7 @@ function renderMonitorConfig() {
     const results = document.getElementById('monitor-results');
     results.replaceChildren();
     if (op.kind === 'provision') {
-        for (const [status, title] of [['failed', 'Needs attention'], ['duplicate_removed', 'Duplicates removed'], ['duplicate_pending', 'Duplicates found; removal pending'], ['pending', 'Waiting for assignment'], ['assigned', 'Assigned']]) {
+        for (const [status, title] of [['failed', 'Needs attention'], ['awaiting_identity', 'Channel assigned; start the account once to get access'], ['duplicate_removed', 'Duplicates removed'], ['duplicate_pending', 'Duplicates found; removal pending'], ['pending', 'Waiting for assignment'], ['assigned', 'Assigned']]) {
             const rows = (op.results || []).filter(row => row.status === status);
             if (!rows.length) continue;
             const heading = document.createElement('h3');

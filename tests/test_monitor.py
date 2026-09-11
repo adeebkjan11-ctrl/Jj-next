@@ -136,3 +136,53 @@ class MonitorTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(row['last_cash_update'], 123)
         finally:
             state.account_stats.clear(); state.account_stats.update(original)
+
+    def test_withdrawal_estimate_distinguishes_missing_limits_and_stale_cash(self):
+        owner = 'u_abcdac'
+        spaces.ensure_space(owner)
+        proxy_manager.save_accounts(owner, [{'name': 'acc1', 'user_id': 'old-id'}])
+        monitor.save_config(owner, {'recipient_id': '67890', 'withdraw_percent': 50})
+        today = monitor.datetime.datetime.now(monitor.datetime.timezone.utc).strftime('%Y-%m-%d')
+        for name, stats_extra, bot_extra, expected in [
+            ('unknown level', {}, {}, (45000, 0, 45000)),
+            ('known level', {'level': 1}, {}, (45000, 45000, 0)),
+            ('null server allowance', {'level': 1, 'owner_send': {'day': today, 'sent': 24000, 'server_remaining': None}}, {}, (40000, 40000, 0)),
+            ('server allowance', {'owner_send': {'day': today, 'server_remaining': 1234}}, {}, (1234, 1234, 0)),
+            ('exhausted', {'level': 1, 'owner_send': {'day': today, 'server_remaining': 0}}, {}, (0, 0, 0)),
+            ('old ledger', {'level': 1, 'owner_send': {'day': '2000-01-01', 'server_remaining': 0}}, {}, (45000, 45000, 0)),
+            ('stale cash', {'level': 1, 'last_cash_update': time.time() - 3600}, {}, (45000, 0, 0)),
+            ('unobserved cash', {'level': 1, 'last_cash_update': None}, {}, (0, 0, 0)),
+            ('paused', {}, {'paused': True}, (0, 0, 0)),
+            ('inactive', {}, {'active': False}, (0, 0, 0)),
+            ('disconnected', {}, {'is_ready': False}, (0, 0, 0)),
+            ('recipient with outdated saved id', {}, {'user': SimpleNamespace(id=67890)}, (0, 0, 0)),
+            ('unresolved transfer', {'withdrawal': {'status': 'unknown'}}, {}, (0, 0, 0)),
+            ('fixed limit', {}, {'config': {'owner': {'limit_mode': 'fixed', 'daily_send_limit': 20000}}}, (20000, 20000, 0)),
+        ]:
+            with self.subTest(name=name):
+                stats = dict(current_cash=90000, last_cash_update=time.time(), level=None)
+                stats.update(stats_extra)
+                bot = SimpleNamespace(account_name='acc1', user=SimpleNamespace(id=12345), active=True,
+                    is_ready=True, paused=False, stats=stats, config={'owner': {}})
+                for key, value in bot_extra.items():
+                    setattr(bot, key, value)
+                with patch.object(state, 'bots_for', return_value=[bot]), patch.object(history_tracker, 'get_db', side_effect=RuntimeError):
+                    result = monitor.snapshot(owner)
+                self.assertEqual(tuple(result[k] for k in ('withdrawal_estimate', 'withdrawable', 'pending_limit_amount')), expected)
+                self.assertEqual(result['pending_limit_accounts'], int(expected[2] > 0))
+                self.assertEqual(result['stale_balance_accounts'], int(name == 'stale cash'))
+                text = monitor.build_message(result)['embeds'][0]['fields'][2]['value']
+                self.assertNotIn('Unknown limits', text)
+                self.assertEqual('needs level sync' in text, expected[2] > 0)
+
+    def test_missing_recipient_has_no_withdrawal_estimate(self):
+        owner = 'u_abcdad'
+        spaces.ensure_space(owner)
+        proxy_manager.save_accounts(owner, [{'name': 'acc1', 'user_id': '12345'}])
+        monitor.save_config(owner, {'recipient_id': ''})
+        bot = SimpleNamespace(account_name='acc1', user=SimpleNamespace(id=12345), active=True,
+            is_ready=True, paused=False, stats={'current_cash': 90000, 'last_cash_update': time.time(), 'level': 1}, config={'owner': {}})
+        with patch.object(state, 'bots_for', return_value=[bot]), patch.object(history_tracker, 'get_db', side_effect=RuntimeError):
+            result = monitor.snapshot(owner)
+        self.assertEqual(result['withdrawable'], 0)
+        self.assertEqual(result['withdrawal_estimate'], 0)

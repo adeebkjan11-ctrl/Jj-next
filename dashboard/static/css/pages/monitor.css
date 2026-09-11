@@ -31,6 +31,7 @@
 #monitor-results h3 { margin: 18px 0 8px; color: var(--text-main); font: 600 14px var(--font-heading); }
 #monitor-results p[data-state="failed"] { color: var(--danger); }
 #monitor-results p[data-state="duplicate_removed"] { color: var(--warning); }
+#monitor-results p[data-state="awaiting_identity"] { color: var(--warning); }
 #monitor-results p[data-state="assigned"] { color: var(--success); }
 #monitor-results { max-height: 300px; overflow: auto; }
 #monitor-results p { padding: 12px 0; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }

@@ -1,5 +1,35 @@
 # Monitor and account setup fixes
 
+## Withdrawal display update
+
+The Monitor Bot tab now shows **Available to withdraw (estimate)** using the saved
+withdrawal percentage and cached balances of ready, active, unpaused accounts.
+Known daily limits cap the estimate. Missing levels no longer silently turn a
+known balance into a zero estimate: the card separately identifies the amount
+that needs level sync before withdrawal, and the amount with fresh balances and
+known limits. The old "59 unknown limits" text counted accounts without usable
+limit data; it was not an error code or a currency amount.
+
+The estimate is not a promise that the entire amount can be sent. Accounts with
+unknown limits still need a readable level or an explicitly configured fixed
+daily limit before the existing withdrawal process can send from them. Cached
+balances are refreshed by that process. Server limits remain authoritative.
+
+The recipient's own account, stopped/paused accounts, unresolved transfers, and
+spaces without a recipient are excluded. The monitor now uses the live account
+ID when saved identity is outdated, and falls back to the calculated limit when
+the saved server allowance is null. The Discord overview uses the same wording.
+
+Apply this ZIP to the application source and restart/redeploy. Keep existing
+deployment secrets and runtime data. Refresh the dashboard after restarting.
+
+Verification: 71 offline Python regression tests and the dependency-free monitor
+frontend suite passed, plus Python compilation and JavaScript syntax checks.
+Coverage includes the 59-account missing-limit display, daily reset, server
+allowances (including null and zero), fixed limits, stale balances, percentages,
+recipient exclusion, and unresolved transfers. No live Discord withdrawal or
+browser layout verification was performed.
+
 ## Using this update
 
 Replace your application source with this version and restart/redeploy using your existing setup. Keep your existing data directory and deployment secrets. Open **Monitor Bot** in the sidebar.

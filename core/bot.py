@@ -280,6 +280,7 @@ class NeuraBot(commands.Bot):
         # so the dashboard can tell which space a running account belongs to
         state.account_owners[self.user_id] = self.space_owner
         self._persist_user_id()
+        await self._claim_setup_channel()
         
         self.identifiers = [
             self.username.lower(),
@@ -601,6 +602,29 @@ class NeuraBot(commands.Bot):
             proxy_manager.set_account_user_id(self.space_owner, name, self.user_id)
         except Exception as e:
             _log.warning("could not record account user id: %s", e)
+
+    async def _claim_setup_channel(self):
+        """Ask the monitor to open the channel setup assigned this account.
+
+        Channel setup runs with the accounts stopped, so an account that has never
+        connected can reach it with no Discord id on record - and with no id there
+        is no permission overwrite to write. It is given the channel anyway,
+        because an account without one cannot be started at all. The gateway has
+        just told us who this account is, so this is the moment the overwrite can
+        be added. Does nothing for an account whose channel is already open to it.
+        """
+        name = getattr(self, 'account_name', None)
+        if not name or not self.user_id:
+            return
+        try:
+            from core import monitor
+            granted = await asyncio.wait_for(
+                monitor.grant_channel_access(self.space_owner, name, self.user_id), timeout=30)
+        except Exception as e:
+            self.log("WARN", f"Could not claim the channel assigned by setup: {e}")
+        else:
+            if granted:
+                self.log("SUCCESS", "Monitor opened the assigned channel to this account")
 
     async def on_socket_raw_receive(self, msg):
         """Parse each gateway frame once and hand the result to every cog.

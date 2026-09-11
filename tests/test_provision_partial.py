@@ -43,10 +43,14 @@ class PartialProvisionTests(unittest.IsolatedAsyncioTestCase):
             return await request(api, method, path, payload)
         with patch.object(monitor, '_identify_account', identity), patch.object(FakeAPI, 'request', membership):
             result = await monitor.provision(self.owner)
-        self.assertEqual(result, {'channels': 2, 'accounts': 4, 'failed': 3, 'duplicates_removed': 2})
+        self.assertEqual(result, {'channels': 2, 'accounts': 4, 'failed': 1, 'awaiting': 2, 'duplicates_removed': 2})
         saved = proxy_manager.load_accounts(self.owner)
         self.assertEqual([a['name'] for a in saved], [a['name'] for a in self.accounts[:7]])
         self.assertEqual([a['name'] for a in saved if a['channel_setup']['status'] == 'assigned'], ['acc0', 'acc4', 'acc5', 'acc6'])
+        # An unidentified account still gets a channel: without one it cannot be
+        # started, and only a start can record the id that identifies it.
+        self.assertEqual([a['name'] for a in saved if a['channel_setup']['status'] == 'awaiting_identity'], ['acc1', 'acc2'])
+        self.assertTrue(all(saved[i]['channels'] for i in (1, 2)))
         self.assertIn('not a member', saved[3]['channel_setup']['reason'])
         rows = monitor._operations[self.owner]['results']
         self.assertEqual(sum(r['status'] == 'duplicate_removed' for r in rows), 2)
@@ -54,15 +58,65 @@ class PartialProvisionTests(unittest.IsolatedAsyncioTestCase):
         calls = [p for _, p, _ in FakeAPI.calls if '/members/' in p]
         self.assertEqual(calls.count('/guilds/22222/members/10000'), 1)
 
-    async def test_all_bad_accounts_are_kept_but_duplicate_rows_are_removed(self):
+    async def test_unidentified_accounts_are_kept_channelled_and_duplicate_rows_removed(self):
         accounts = [self.accounts[0], dict(self.accounts[0], name='copy')]
         proxy_manager.save_accounts(self.owner, accounts)
-        with patch.object(monitor, '_identify_account', AsyncMock(side_effect=monitor.AccountSetupError('Invalid token'))):
+        with patch.object(monitor, '_identify_account', AsyncMock(side_effect=monitor.AccountSetupError('Refused'))):
             result = await monitor.provision(self.owner)
-        self.assertEqual(result, {'channels': 0, 'accounts': 0, 'failed': 1, 'duplicates_removed': 1})
-        self.assertEqual(len(proxy_manager.load_accounts(self.owner)), 1)
-        self.assertEqual(FakeAPI.channels, [])
-        self.restart.assert_not_called()
+        self.assertEqual(result, {'channels': 1, 'accounts': 0, 'failed': 0, 'awaiting': 1, 'duplicates_removed': 1})
+        saved = proxy_manager.load_accounts(self.owner)
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(saved[0]['channel_setup']['status'], 'awaiting_identity')
+        self.assertIn('start this account once', saved[0]['channel_setup']['reason'])
+        # No overwrite can be written for an account nobody has identified yet.
+        group = next(c for c in FakeAPI.channels if ':group:' in c.get('topic', ''))
+        self.assertEqual([p['id'] for p in group['permission_overwrites']],
+                         ['22222', '99999', '67890', '408785106942164992'])
+
+    async def test_monitor_is_connected_even_when_no_account_was_assigned(self):
+        proxy_manager.save_accounts(self.owner, [self.accounts[0]])
+        with patch.object(monitor, '_identify_account', AsyncMock(side_effect=monitor.DiscordError(404))):
+            await monitor.provision(self.owner)
+        overview = next(c for c in FakeAPI.channels if c.get('topic', '').endswith(':monitor'))
+        self.assertTrue(monitor.load_config(self.owner)['enabled'])
+        self.assertEqual(monitor.load_config(self.owner)['channel_id'], overview['id'])
+        self.restart.assert_awaited_once_with(self.owner)
+
+    async def test_overview_channel_is_reused_rather_than_duplicated(self):
+        await monitor.provision(self.owner)
+        created = len(FakeAPI.channels)
+        await monitor.provision(self.owner)
+        self.assertEqual(len(FakeAPI.channels), created)
+        self.assertEqual(sum(c.get('topic', '').endswith(':monitor') for c in FakeAPI.channels), 1)
+
+    async def test_recorded_identity_rescues_an_account_discord_refuses_to_confirm(self):
+        accounts = [dict(self.accounts[0], user_id='10000'), dict(self.accounts[1], user_id='not-an-id')]
+        proxy_manager.save_accounts(self.owner, accounts)
+        with patch.object(monitor, '_identify_account', AsyncMock(side_effect=monitor.AccountSetupError('Refused'))):
+            result = await monitor.provision(self.owner)
+        self.assertEqual((result['accounts'], result['awaiting'], result['failed']), (1, 1, 0))
+        saved = proxy_manager.load_accounts(self.owner)
+        self.assertEqual(saved[0]['channel_setup']['status'], 'assigned')
+        self.assertIn('recorded', saved[0]['channel_setup']['reason'])
+        group = next(c for c in FakeAPI.channels if ':group:' in c.get('topic', ''))
+        self.assertIn('10000', [p['id'] for p in group['permission_overwrites']])
+
+    async def test_recorded_identity_still_has_to_be_in_the_server(self):
+        proxy_manager.save_accounts(self.owner, [dict(self.accounts[0], user_id='10000')])
+        request = FakeAPI.request
+        async def membership(api, method, path, payload=None):
+            if path.endswith('/members/10000'): raise monitor.DiscordError(404)
+            return await request(api, method, path, payload)
+        with patch.object(monitor, '_identify_account', AsyncMock(side_effect=monitor.AccountSetupError('Refused'))), \
+                patch.object(FakeAPI, 'request', membership):
+            result = await monitor.provision(self.owner)
+        self.assertEqual((result['accounts'], result['awaiting'], result['failed']), (0, 0, 1))
+        self.assertIn('not a member', proxy_manager.load_accounts(self.owner)[0]['channel_setup']['reason'])
+
+    async def test_a_fresh_login_identity_wins_over_a_stale_recorded_one(self):
+        proxy_manager.save_accounts(self.owner, [dict(self.accounts[0], user_id='19999')])
+        await monitor.provision(self.owner)
+        self.assertEqual(proxy_manager.load_accounts(self.owner)[0]['user_id'], '10000')
 
     async def test_channel_group_failure_does_not_stop_later_groups(self):
         request = FakeAPI.request

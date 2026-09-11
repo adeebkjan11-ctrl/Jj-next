@@ -250,7 +250,9 @@ function accountConfigCard(acc) {
         `<span class="dim">${escHtml(acc.status_reason)}</span>`;
     const setup = acc.channel_setup || {};
     const setupReason = setup.status === 'failed'
-        ? `<span class="acct-state problem">CHANNEL SETUP FAILED</span><span class="dim">${escHtml(setup.reason || 'Retry setup in Monitor Bot')}</span>` : '';
+        ? `<span class="acct-state problem">CHANNEL SETUP FAILED</span><span class="dim">${escHtml(setup.reason || 'Retry setup in Monitor Bot')}</span>`
+        : setup.status === 'awaiting_identity'
+        ? '<span class="dim">Channel assigned · access is granted the first time you start this account</span>' : '';
     const runBtn = acc.running
         ? `<button class="btn-proxy-sm danger" onclick="stopAccount('${jsArg(name)}')">Stop</button>`
         : `<button class="btn-proxy-sm" onclick="launchAccount('${jsArg(name)}')">Start</button>`;

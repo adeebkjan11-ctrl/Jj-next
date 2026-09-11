@@ -57,6 +57,21 @@ class Element {
     assert.equal(el('monitor-enabled').checked, true);
     assert.equal(el('monitor-server').value, '22222');
     assert.equal(el('monitor-summary').children.length, 4);
+    context.renderMonitorSummary({configured: 59, ready: 59, connected: 59, total_owo: 5900000,
+        withdrawable: 0, withdrawal_estimate: 2950000, pending_limit_amount: 2950000,
+        pending_limit_accounts: 59, unknown_limits: 59, best: null});
+    let withdrawalCard = el('monitor-summary').children[2];
+    assert.equal(withdrawalCard.children[0].textContent, 'Available to withdraw (estimate)');
+    assert.equal(withdrawalCard.children[1].textContent, (2950000).toLocaleString());
+    assert.match(withdrawalCard.children[2].textContent, /needs level sync before withdrawal \(59 accounts\)/);
+    assert(!withdrawalCard.children[2].textContent.includes('unknown limits'));
+    context.renderMonitorSummary({configured: 1, ready: 1, connected: 1, total_owo: 10000,
+        withdrawable: 0, withdrawal_estimate: 5000, pending_limit_accounts: 0, stale_balance_accounts: 1, best: null});
+    withdrawalCard = el('monitor-summary').children[2];
+    assert.match(withdrawalCard.children[2].textContent, /Cached balances will be refreshed/);
+    assert(!withdrawalCard.children[2].textContent.includes('level sync'));
+    await context.pollMonitor();
+    assert.equal(el('monitor-summary').children[2].children[1].textContent, (64000).toLocaleString());
     el('monitor-percent').value = '60'; el('monitor-percent').listeners.input();
     await context.pollMonitor();
     assert.equal(el('monitor-percent').value, '60');
@@ -68,16 +83,18 @@ class Element {
     assert.equal(calls[before].headers.get('X-CSRF-Token'), 'synthetic-csrf');
     assert.equal(calls[before+1].url, '/api/monitor/servers');
     assert.equal(el('monitor-token').value, '');
-    config.operation = {kind: 'provision', status: 'complete_with_errors', result: {accounts: 3, failed: 1, duplicates_removed: 1, channels: 1}, results: [
+    config.operation = {kind: 'provision', status: 'complete_with_errors', result: {accounts: 3, failed: 1, awaiting: 1, duplicates_removed: 1, channels: 1}, results: [
         {name: 'healthy', status: 'assigned', channel_id: '12345'},
         {name: 'broken', status: 'failed', reason: 'Account token rejected'},
+        {name: 'never-started', status: 'awaiting_identity', reason: 'Start it once to get access', channel_id: '12345'},
         {name: 'copy', status: 'duplicate_removed', reason: 'Same Discord account; kept healthy.'}
     ]};
     await context.pollMonitor();
     assert.equal(el('monitor-status').textContent, 'Setup finished with errors');
-    assert.match(el('monitor-progress').textContent, /3 assigned · 1 failed · 1 duplicates removed/);
+    assert.match(el('monitor-progress').textContent, /3 assigned · 1 waiting for a first connection · 1 failed · 1 duplicates removed/);
     const resultText = el('monitor-results').children.map(child => child.textContent).join(' ');
     assert.match(resultText, /Needs attention \(1\)/);
+    assert.match(resultText, /start the account once to get access \(1\)/);
     assert.match(resultText, /Duplicates removed \(1\)/);
     assert.match(resultText, /Assigned \(1\)/);
     assert(!resultText.includes('confirmed'), 'Setup must not use withdrawal result labels');

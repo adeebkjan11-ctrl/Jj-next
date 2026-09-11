@@ -188,6 +188,14 @@ class AccountSetupError(ValueError):
     """An account-specific, credential-free setup failure."""
 
 
+# An account with no channel cannot be started at all (supervisor.start_account
+# refuses one), so a channel is assigned even when setup could not establish the
+# account's Discord id. Without the id there is no permission overwrite to write,
+# and the account cannot see the channel until grant_channel_access() adds one.
+AWAITING_HINT = ('The channel is assigned anyway; start this account once from Accounts and it is '
+                 'given access automatically as soon as it reports who it is.')
+
+
 def setup_error(exc, stage):
     if isinstance(exc, AccountSetupError):
         return str(exc)
@@ -228,8 +236,9 @@ async def _identify_account(owner, account):
             raise AccountSetupError('This token belongs to a bot, not an OwO account.')
         return str(user.id)
     except discord.LoginFailure:
-        raise AccountSetupError('The dashboard-client login check was rejected. If this account still starts '
-                                'successfully, retry setup and check its selected proxy.') from None
+        raise AccountSetupError('Discord refused the identity check for this account (HTTP 401). That is not '
+                                'proof the token is dead - accounts that start from Accounts have been '
+                                'refused here.') from None
     except discord.HTTPException as exc:
         raise AccountSetupError(f'Account identity check failed (HTTP {exc.status}). '
                                 'Retry setup; this alone does not establish that the token is invalid.') from None
@@ -239,6 +248,37 @@ async def _identify_account(owner, account):
         except Exception:
             # Do not replace an identity/login result with a cleanup error.
             pass
+
+
+def recorded_user_id(account):
+    """The Discord id this config row last logged in as, or ''.
+
+    core.bot writes it on every ready, so it is evidence of a completed gateway
+    login rather than of a REST probe - the account really did connect with it.
+    """
+    uid = str((account or {}).get('user_id') or '').strip()
+    return uid if spaces.is_valid_discord_id(uid) else ''
+
+
+async def resolve_identity(owner, account):
+    """(discord_id, source) for one account. A refused probe is not the last word.
+
+    A fresh login is still preferred: a token pasted onto an existing row leaves
+    the previous account's id behind, and only a login can notice. But a probe
+    Discord refuses does not establish that an account is unusable - the whole
+    point of this fallback is that the accounts being refused here are the same
+    ones that log in and farm from the Accounts page. So a refusal falls back to
+    the id a real login already recorded, and the caller's membership check (run
+    with the monitor bot's own credentials, which are known to work) is what
+    decides whether that id can be given a channel.
+    """
+    try:
+        return await _identify_account(owner, account), 'login'
+    except Exception:
+        uid = recorded_user_id(account)
+        if not uid:
+            raise
+        return uid, 'recorded'
 
 
 async def provision(owner):
@@ -259,6 +299,12 @@ async def provision(owner):
     progress.update(stage='verifying accounts', total=len(accounts), done=0)
     kept, eligible = [], []
     seen_tokens, seen_users = {}, {}
+    # id(account) -> 'login' | 'recorded'. Which of the two an assignment rests on
+    # is worth saying out loud: "assigned on a recorded id" is the account to look
+    # at when its channel turns out to belong to whoever the token used to be.
+    identities = {}
+    RECORDED_NOTE = ('Assigned on the Discord ID recorded at this account\'s last successful start; '
+                     'Discord would not re-confirm it now.')
 
     def commit():
         # Compare the full source snapshot: do not erase concurrent config edits.
@@ -299,7 +345,7 @@ async def provision(owner):
                 seen_tokens[token] = account
             stage = 'verification'
             try:
-                uid = await _identify_account(owner, account)
+                uid, source = await resolve_identity(owner, account)
                 original = seen_users.get(uid)
                 if original is not None:
                     if token:
@@ -315,17 +361,31 @@ async def provision(owner):
                 # 401 here uses the monitor's bot credentials, not the account's.
                 if stage == 'membership' and isinstance(exc, DiscordError) and exc.status in (401, 403):
                     raise
-                mark(account, row, 'failed', setup_error(exc, stage))
                 kept.append(account)
+                if stage == 'membership':
+                    mark(account, row, 'failed', setup_error(exc, stage))
+                else:
+                    # Nobody knows who this account is yet, so there is no overwrite
+                    # to write - but refusing it a channel would also leave it
+                    # unstartable, and an account that cannot start can never
+                    # record the id that would fix this. Assign the channel and
+                    # let its first login close the loop.
+                    mark(account, row, 'awaiting_identity', f'{setup_error(exc, stage)} {AWAITING_HINT}')
+                    eligible.append((account, row))
             else:
                 kept.append(account)
-                mark(account, row, 'pending', 'Verified; waiting for channel assignment.')
+                identities[id(account)] = source
+                mark(account, row, 'pending', 'Verified; waiting for channel assignment.' if source == 'login'
+                     else f'{RECORDED_NOTE} Waiting for channel assignment.')
                 eligible.append((account, row))
             finally:
                 progress['done'] = index + 1
                 await asyncio.sleep(0.4)
         commit()
-        channels = await api.request('GET', f'/guilds/{guild_id}/channels') if eligible else []
+        # Always read the channel list, even with nothing to assign: the overview
+        # channel below is looked up in it, and an empty list would make every run
+        # create a second one.
+        channels = await api.request('GET', f'/guilds/{guild_id}/channels')
         prefix = f'LazyFarmers:{owner}:'
         base = [{'id': guild_id, 'type': 0, 'deny': str(VIEW), 'allow': '0'},
                 {'id': me['id'], 'type': 1, 'allow': str(ACCESS), 'deny': '0'},
@@ -344,8 +404,11 @@ async def provision(owner):
                     channels.append(category)
                 topic = prefix + f'group:{index + 1}'
                 channel = next((c for c in channels if c.get('topic') == topic and c['type'] == 0), None)
-                permissions = base + [{'id': a['user_id'], 'type': 1, 'allow': str(ACCESS), 'deny': '0'}
-                                      for a in group if a['user_id'] not in (owner_id, me['id'])]
+                # A group may hold an account whose id is not known yet; it gets
+                # its overwrite from grant_channel_access() instead.
+                permissions = base + [{'id': uid, 'type': 1, 'allow': str(ACCESS), 'deny': '0'}
+                                      for uid in map(recorded_user_id, group)
+                                      if uid and uid not in (owner_id, me['id'])]
                 permissions.append({'id': '408785106942164992', 'type': 1, 'allow': str(ACCESS), 'deny': '0'})
                 body = {'name': f'farm-{index + 1:03d}', 'type': 0, 'parent_id': category['id'],
                         'topic': topic, 'permission_overwrites': permissions}
@@ -363,23 +426,90 @@ async def provision(owner):
                 assigned_channels += 1
                 for account in group:
                     account['channels'] = [channel['id']]
-                    mark(account, account_rows[id(account)], 'assigned', channel_id=channel['id'])
+                    row = account_rows[id(account)]
+                    if recorded_user_id(account):
+                        mark(account, row, 'assigned',
+                             '' if identities.get(id(account)) == 'login' else RECORDED_NOTE,
+                             channel_id=channel['id'])
+                    else:
+                        mark(account, row, 'awaiting_identity', row.get('reason') or AWAITING_HINT,
+                             channel_id=channel['id'])
             commit()
             progress['done'] = index + 1
 
-        if assigned_channels:
-            status_channel = next((c for c in channels if c.get('topic') == prefix + 'monitor'), None)
-            if status_channel is None:
-                status_channel = await api.request('POST', f'/guilds/{guild_id}/channels',
-                    {'name': 'operations-overview', 'type': 0, 'topic': prefix + 'monitor',
-                     'permission_overwrites': base})
-            save_config(owner, {'channel_id': status_channel['id'], 'owner_id': owner_id,
-                                 'recipient_id': owner_id, 'enabled': True})
-    if assigned_channels:
-        await restart(owner)
+        # The overview channel and the connection itself belong to the monitor, not
+        # to any account, so they are set up whatever the per-account results were.
+        # Gating them on "at least one channel was assigned this run" is what left
+        # the monitor bot permanently offline after a run that assigned nothing -
+        # with no way to bring it up from the tab, because this is the only place
+        # that ever sets channel_id and enabled.
+        status_channel = next((c for c in channels if c.get('topic') == prefix + 'monitor'), None)
+        if status_channel is None:
+            status_channel = await api.request('POST', f'/guilds/{guild_id}/channels',
+                {'name': 'operations-overview', 'type': 0, 'topic': prefix + 'monitor',
+                 'permission_overwrites': base})
+        save_config(owner, {'channel_id': status_channel['id'], 'owner_id': owner_id,
+                             'recipient_id': owner_id, 'enabled': True})
+    await restart(owner)
     return {'channels': assigned_channels, 'accounts': sum(r['status'] == 'assigned' for r in rows),
             'failed': sum(r['status'] == 'failed' for r in rows),
+            'awaiting': sum(r['status'] == 'awaiting_identity' for r in rows),
             'duplicates_removed': sum(r['status'] == 'duplicate_removed' for r in rows)}
+
+
+def _record_channel_setup(owner, name, values):
+    """Update one account's channel_setup row and nothing else.
+
+    Called while that account is running, so it must not rewrite the file from a
+    snapshot taken earlier - the whole point is to touch a single key.
+    """
+    from utils import proxy_manager
+    with proxy_manager._FILE_LOCK:
+        accounts = proxy_manager.load_accounts(owner)
+        for account in accounts:
+            if account.get('name') == name:
+                account['channel_setup'] = dict(account.get('channel_setup') or {}, at=time.time(), **values)
+                proxy_manager.save_accounts(owner, accounts)
+                return True
+    return False
+
+
+async def grant_channel_access(owner, name, user_id):
+    """Give a newly identified account access to the channel setup already assigned it.
+
+    Channel setup can run before an account has ever connected, and an account
+    that has never connected has no Discord id to write a permission overwrite
+    for. It is still given a channel - one is required to start at all - so the
+    missing overwrite is added here, the first time the account logs in and says
+    who it is. Returns False and does nothing for every other account, including
+    every account in a space with no monitor bot configured.
+    """
+    uid = str(user_id or '').strip()
+    if not spaces.is_valid_discord_id(uid):
+        return False
+    cfg = load_config(owner)
+    if not cfg.get('token') or not cfg.get('guild_id'):
+        return False
+    from utils import proxy_manager
+    account = next((a for a in proxy_manager.load_accounts(owner) if a.get('name') == name), None)
+    setup = (account or {}).get('channel_setup') or {}
+    if setup.get('status') != 'awaiting_identity':
+        return False
+    channel_id = str(setup.get('channel_id') or next(iter(account.get('channels') or []), '') or '')
+    if not channel_id.isdigit():
+        return False
+    async with BotAPI(cfg['token']) as api:
+        channel = await api.request('GET', f'/channels/{channel_id}')
+        # PATCH replaces the whole array, so the existing overwrites have to be
+        # read back and carried over - and reduced to the four fields Discord
+        # accepts on the way in.
+        overwrites = [{'id': str(o['id']), 'type': int(o.get('type', 1)),
+                       'allow': str(o.get('allow', '0')), 'deny': str(o.get('deny', '0'))}
+                      for o in channel.get('permission_overwrites') or [] if str(o.get('id', '')) != uid]
+        overwrites.append({'id': uid, 'type': 1, 'allow': str(ACCESS), 'deny': '0'})
+        await api.request('PATCH', f'/channels/{channel_id}', {'permission_overwrites': overwrites})
+    _record_channel_setup(owner, name, {'status': 'assigned', 'reason': '', 'channel_id': channel_id})
+    return True
 
 
 def start_operation(owner, kind):
@@ -446,6 +576,8 @@ def snapshot(owner):
     result = {'configured': len(accounts), 'connected': 0, 'ready': 0, 'cached': 0,
               'captcha': 0, 'paused': 0, 'failed': 0, 'queued': 0, 'low_cash': 0,
               'total_owo': 0, 'withdrawable': 0, 'unknown_limits': 0, 'accounts': [],
+              'withdrawal_estimate': 0, 'pending_limit_amount': 0,
+              'pending_limit_accounts': 0, 'stale_balance_accounts': 0,
               'hour_net': 0, 'day_net': 0, 'best': None, 'sampled_accounts': 0, 'attention': 0}
     history = {}
     try:
@@ -459,7 +591,7 @@ def snapshot(owner):
         pass
     for account in accounts:
         bot = live.get(account.get('name'))
-        uid = str(account.get('user_id') or '')
+        uid = str(getattr(getattr(bot, 'user', None), 'id', None) or account.get('user_id') or '')
         st = bot.stats if bot and getattr(bot, 'user', None) else state.account_stats.get(uid, {})
         if not bot and st.get('space_owner') != owner:
             st = {}
@@ -481,14 +613,31 @@ def snapshot(owner):
         account_cfg = bot.config.get('owner', {}) if bot else {}
         limit = send_limit(account_cfg, st)
         rec = st.get('owner_send', {}) if st.get('owner_send', {}).get('day') == today else {}
-        remaining = rec.get('server_remaining', None if limit is None else max(0, limit - int(rec.get('sent', 0))))
+        remaining = rec.get('server_remaining')
+        if remaining is None and limit is not None:
+            remaining = max(0, limit - int(rec.get('sent', 0)))
+        if remaining is not None:
+            remaining = max(0, int(remaining))
         result['unknown_limits'] += int(remaining is None)
-        eligible = ready and not bot.paused and fresh and uid != cfg.get('recipient_id')
-        available = min(int(max(0, cash or 0) * cfg.get('withdraw_percent', 100) / 100), max(0, remaining or 0)) if eligible else 0
-        if st.get('withdrawal', {}).get('status') in ('sending', 'awaiting_confirmation', 'verifying', 'unknown'):
-            available = 0
+        # A withdrawal refreshes cash before sending. Keep its cached balance
+        # estimate separate from the fresh, known-limit amount available now.
+        recipient = str(cfg.get('recipient_id') or '')
+        eligible = bool(ready and getattr(bot, 'active', True) and not bot.paused
+                        and recipient.isdigit() and uid != recipient)
+        unresolved = st.get('withdrawal', {}).get('status') in ('sending', 'awaiting_confirmation', 'verifying', 'unknown')
+        estimate = int(max(0, cash or 0) * cfg.get('withdraw_percent', 100) / 100) if eligible and not unresolved else 0
+        if remaining is not None:
+            estimate = min(estimate, remaining)
+        available = estimate if fresh and remaining is not None else 0
+        pending_limit = estimate if remaining is None else 0
+        result['withdrawal_estimate'] += estimate
+        result['pending_limit_amount'] += pending_limit
+        result['pending_limit_accounts'] += int(pending_limit > 0)
+        result['stale_balance_accounts'] += int(estimate > 0 and not fresh)
         result['withdrawable'] += available
         row = {'name': account['name'], 'balance': cash, 'withdrawable': available, 'level': st.get('level'),
+               'withdrawal_estimate': estimate, 'remaining_limit': remaining,
+               'pending_limit_amount': pending_limit, 'balance_fresh': fresh,
                'withdrawal': st.get('withdrawal', {}), 'captcha_job': job, 'net_24h': None}
         samples = history.get(uid, [])
         if len(samples) >= 2 and (bot or st.get('space_owner') == owner):
@@ -517,12 +666,17 @@ def snapshot(owner):
 def build_message(s):
     best = s.get('best')
     attention = s.get('attention', s['captcha'] + s['missing'])
+    balance_note = f"`Available to withdraw (estimate)` **{s.get('withdrawal_estimate', s['withdrawable']):,}**\n`Fresh balance, known limit` **{s['withdrawable']:,}**"
+    if s.get('pending_limit_accounts'):
+        balance_note += f"\n{s['pending_limit_amount']:,} OwO needs level sync before withdrawal ({s['pending_limit_accounts']} accounts)."
+    if s.get('stale_balance_accounts'):
+        balance_note += '\nCached balances will be refreshed before sending.'
     return {'embeds': [{'title': '🛰️ Operations Overview', 'color': 0x5865F2,
         'description': f"{'🟡' if attention else '🟢'} **{attention} accounts need attention.**",
         'fields': [
             {'name': '👥 Fleet', 'value': f"`Configured` **{s['configured']}**\n`Connected` **{s['connected']}**\n`Ready` **{s['ready']}**\n`Balances` **{s['cached']} / {s['configured']} cached**\n`Low cash` **{s['low_cash']}**", 'inline': False},
             {'name': '⚠️ Attention', 'value': f"`Captcha` **{s['captcha']}** · `Paused` **{s['paused']}**\n`Missing` **{s['missing']}** · `Failed` **{s['failed']}** · `Queued` **{s['queued']}**", 'inline': False},
-            {'name': '💰 Balances', 'value': f"`Total OwO` **{s['total_owo']:,}**\n`Withdrawable now` **{s['withdrawable']:,}** (estimate)\n`Unknown limits` **{s['unknown_limits']}**", 'inline': False},
+            {'name': '💰 Balances', 'value': f"`Total OwO` **{s['total_owo']:,}**\n{balance_note}", 'inline': False},
             {'name': '📈 Performance · sampled net change', 'value': f"`1 hour` **{s['hour_net']:+,} OwO**\n`24 hours` **{s['day_net']:+,} OwO**\n{s['sampled_accounts']} accounts with usable samples", 'inline': False},
             {'name': '🏆 Best account · 24 hours', 'value': (f"**{best['name']}**\n{best['net_24h']:+,} OwO" if best else 'Waiting for balance history'), 'inline': False}],
         'footer': {'text': 'Owner-only • Cached balances • Limits estimated; OwO decides • No USD valuation'},

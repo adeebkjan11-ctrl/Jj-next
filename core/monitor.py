@@ -202,26 +202,43 @@ def setup_error(exc, stage):
 
 
 async def _identify_account(owner, account):
-    # Use the account's own proxy. Only a read-only identity lookup, no gateway login.
+    """Resolve identity through the same Discord login stack as dashboard Start.
+
+    A bare aiohttp /users/@me probe does not reproduce the application's login
+    flow and must not be treated as proof that a working account token is dead.
+    Only authenticate: do not connect the gateway or start any account workers.
+    """
+    import discord
+    from core import state
     from utils import proxy_manager
+    token = account.get('token')
+    if not isinstance(token, str) or not token.strip():
+        raise AccountSetupError('This account has no token saved. Add its token, then retry setup.')
     proxy, auth, _ = proxy_manager.resolve_account_proxy(owner, account)
-    connector = None
-    kwargs = {}
-    if proxy and proxy.startswith(('socks4://', 'socks5://')):
-        from aiohttp_socks import ProxyConnector
-        connector = ProxyConnector.from_url(proxy, rdns=True)
-    elif proxy:
-        kwargs = {'proxy': proxy, 'proxy_auth': auth}
-    async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=20)) as session:
-        async with session.get('https://discord.com/api/v9/users/@me',
-                headers={'Authorization': account['token']}, **kwargs) as response:
-            if response.status != 200:
-                raise AccountSetupError('Account token was rejected (HTTP 401). Replace its token and retry.'
-                    if response.status == 401 else f'Account verification failed (HTTP {response.status}). Check the account and retry.')
-            user = await response.json()
-            if user.get('bot'):
-                raise AccountSetupError('This token belongs to a bot, not an OwO account.')
-            return str(user['id'])
+    client = discord.Client(proxy=proxy, proxy_auth=auth)
+    try:
+        # Dashboard startup uses this same gate and lets the installed client
+        # library own authentication, headers, session initialization and proxy use.
+        await state.login_slot()
+        await asyncio.wait_for(client.login(token.strip()), timeout=30)
+        user = client.user
+        if user is None or not str(user.id).isdigit():
+            raise AccountSetupError('Login returned no account identity. Retry setup.')
+        if getattr(user, 'bot', False):
+            raise AccountSetupError('This token belongs to a bot, not an OwO account.')
+        return str(user.id)
+    except discord.LoginFailure:
+        raise AccountSetupError('The dashboard-client login check was rejected. If this account still starts '
+                                'successfully, retry setup and check its selected proxy.') from None
+    except discord.HTTPException as exc:
+        raise AccountSetupError(f'Account identity check failed (HTTP {exc.status}). '
+                                'Retry setup; this alone does not establish that the token is invalid.') from None
+    finally:
+        try:
+            await asyncio.wait_for(client.close(), timeout=5)
+        except Exception:
+            # Do not replace an identity/login result with a cleanup error.
+            pass
 
 
 async def provision(owner):

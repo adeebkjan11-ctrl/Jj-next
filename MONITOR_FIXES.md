@@ -25,7 +25,7 @@ A genuinely invalid or revoked token still needs replacement using the applicati
 
 Passed locally:
 
-- `python -m unittest discover -s tests -q`: 44 Python tests, including monitor authentication/configuration and partial provisioning regressions.
+- `python -m unittest discover -s tests -q`: 53 Python tests, including account identity, monitor authentication/configuration and partial provisioning regressions.
 - `node tests/monitor_frontend.cjs`: saved settings, edits during polling, save-before-discovery ordering, CSRF, Discord 401 handling, dashboard session expiry, and add/import with empty channel lists. Uses a lightweight DOM test double, not a browser rendering engine.
 - Python compilation and JavaScript syntax checks.
 
@@ -42,3 +42,13 @@ Setup removes duplicate configuration entries based on matching nonempty tokens 
 The monitor shows separate **Assigned**, **Needs attention** and **Duplicates removed** results and totals. Accounts with a setup failure appear in the Accounts page's Needs attention section. A job with isolated failures finishes with errors instead of silently reporting full success. Shared configuration failures, such as invalid monitor credentials or missing server access, still stop setup. Account edits during setup are protected from being overwritten.
 
 Additional tests cover bad tokens, timeouts, missing members, identical-token and verified-identity duplicates, all-failed batches, isolated channel failures, persistence after overview failure, retry recovery, concurrent edits, cancellation, partial-job status and grouped UI results. Live Discord and visual layout checks remain unverified.
+
+## v3: Account identity check matches dashboard authentication
+
+The channel-setup check previously sent a standalone aiohttp request to `/users/@me` and labeled every HTTP 401 response as proof of an invalid account token. Dashboard startup uses the installed Discord client library instead. These were different authentication paths, so the setup message was too definitive for accounts that still start successfully.
+
+Setup now uses `discord.Client.login` with the same account token, resolved proxy/authentication settings and shared login pacing as dashboard startup. The client library handles its own authentication/session setup. This identity lookup does not connect the Gateway or run account workers. The temporary client is closed after success, failure, timeout or cancellation. It requires a freshly returned identity and does not trust a stale saved account ID.
+
+To apply: replace the application source and restart/redeploy. Stop the accounts, then run **Monitor Bot → Create & assign channels** again. The rerun replaces old per-account setup results; successful assignments clear previous setup errors. Do not rotate tokens solely because of the old setup 401 message when those accounts can still start.
+
+Nine added offline tests cover use of the client library instead of bare HTTP, proxy and token forwarding, fresh identity, error reporting, timeouts, cancellation, bot/missing-token rejection and cleanup. Tests use a simulated Discord client: the deployed client and live account login were not available here, so this change still needs verification against the affected accounts.

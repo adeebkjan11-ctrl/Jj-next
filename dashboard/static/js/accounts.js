@@ -248,6 +248,9 @@ function accountConfigCard(acc) {
         `<span class="acct-state problem">${escHtml(ACCOUNT_STATUS_LABELS[health] || String(health).toUpperCase())}</span>`;
     const reason = health === 'ok' || !acc.status_reason ? '' :
         `<span class="dim">${escHtml(acc.status_reason)}</span>`;
+    const setup = acc.channel_setup || {};
+    const setupReason = setup.status === 'failed'
+        ? `<span class="acct-state problem">CHANNEL SETUP FAILED</span><span class="dim">${escHtml(setup.reason || 'Retry setup in Monitor Bot')}</span>` : '';
     const runBtn = acc.running
         ? `<button class="btn-proxy-sm danger" onclick="stopAccount('${jsArg(name)}')">Stop</button>`
         : `<button class="btn-proxy-sm" onclick="launchAccount('${jsArg(name)}')">Start</button>`;
@@ -267,6 +270,7 @@ function accountConfigCard(acc) {
                 <span class="mono">${escHtml(token)}</span>
                 <span class="dim">${escHtml(proxy)} · ${status} · Channels: ${escHtml(channels)}</span>
                 ${reason}
+                ${setupReason}
             </div>
             <div class="account-config-actions">
                 ${runBtn}
@@ -284,8 +288,9 @@ function renderAccountConfigList() {
         el.innerHTML = '<div class="no-data">No accounts configured. Click Add Account.</div>';
         return;
     }
-    const problem = accountConfigList.filter(a => (a.status || 'ok') !== 'ok');
-    const healthy = accountConfigList.filter(a => (a.status || 'ok') === 'ok');
+    const needsAttention = a => (a.status || 'ok') !== 'ok' || a.channel_setup?.status === 'failed';
+    const problem = accountConfigList.filter(needsAttention);
+    const healthy = accountConfigList.filter(a => !needsAttention(a));
 
     let html = healthy.map(accountConfigCard).join('');
     if (problem.length) {

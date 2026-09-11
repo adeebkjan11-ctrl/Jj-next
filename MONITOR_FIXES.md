@@ -25,10 +25,20 @@ A genuinely invalid or revoked token still needs replacement using the applicati
 
 Passed locally:
 
-- `python -m unittest discover -s tests -q`: 34 Python tests, including 8 new monitor authentication/configuration regressions.
+- `python -m unittest discover -s tests -q`: 44 Python tests, including monitor authentication/configuration and partial provisioning regressions.
 - `node tests/monitor_frontend.cjs`: saved settings, edits during polling, save-before-discovery ordering, CSRF, Discord 401 handling, dashboard session expiry, and add/import with empty channel lists. Uses a lightweight DOM test double, not a browser rendering engine.
 - Python compilation and JavaScript syntax checks.
 
 `tests/monitor_ui.cjs` is an optional Playwright browser test with mocked APIs. It was not executed successfully in this environment: no local browser binary was available, its download was blocked, and the remote browser blocked the local preview. Rendered desktop/mobile appearance remains unverified. With Playwright and Chromium installed, run `node tests/monitor_ui.cjs` locally. Set `MONITOR_SCREENSHOTS` to an output directory to save screenshots.
 
 No live Discord login or server operation was performed. Captcha processing and withdrawal logic were not changed.
+
+## Channel setup continuation and duplicates
+
+Channel setup now handles account failures individually. Rejected account tokens, connection/proxy errors and accounts missing from the server are listed under **Needs attention**, while healthy accounts continue. A failed channel group also allows later groups to proceed. Successful groups are saved as they finish, so a later overview error does not lose their assignments.
+
+Setup removes duplicate configuration entries based on matching nonempty tokens or freshly verified Discord user IDs, keeping the first matching entry. It does not delete Discord accounts. Failed unique accounts remain saved with their setup error for correction and retry. A successful retry clears the setup error. Duplicate removal also updates proxy assignments.
+
+The monitor shows separate **Assigned**, **Needs attention** and **Duplicates removed** results and totals. Accounts with a setup failure appear in the Accounts page's Needs attention section. A job with isolated failures finishes with errors instead of silently reporting full success. Shared configuration failures, such as invalid monitor credentials or missing server access, still stop setup. Account edits during setup are protected from being overwritten.
+
+Additional tests cover bad tokens, timeouts, missing members, identical-token and verified-identity duplicates, all-failed batches, isolated channel failures, persistence after overview failure, retry recovery, concurrent edits, cancellation, partial-job status and grouped UI results. Live Discord and visual layout checks remain unverified.

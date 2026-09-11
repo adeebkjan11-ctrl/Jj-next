@@ -49,6 +49,7 @@ class Element {
         }});
     context.window = context;
     for (const name of ['core', 'accounts', 'monitor']) vm.runInContext(fs.readFileSync(path.join(root, `dashboard/static/js/${name}.js`), 'utf8'), context);
+    const renderAccounts = vm.runInContext('renderAccountConfigList', context);
     vm.runInContext('showToast = (message, type) => window.testToast(message, type); renderAccountConfigList = () => {};', context);
     context.testToast = (message, type) => toasts.push({message, type});
     await events.DOMContentLoaded();
@@ -67,6 +68,19 @@ class Element {
     assert.equal(calls[before].headers.get('X-CSRF-Token'), 'synthetic-csrf');
     assert.equal(calls[before+1].url, '/api/monitor/servers');
     assert.equal(el('monitor-token').value, '');
+    config.operation = {kind: 'provision', status: 'complete_with_errors', result: {accounts: 3, failed: 1, duplicates_removed: 1, channels: 1}, results: [
+        {name: 'healthy', status: 'assigned', channel_id: '12345'},
+        {name: 'broken', status: 'failed', reason: 'Account token rejected'},
+        {name: 'copy', status: 'duplicate_removed', reason: 'Same Discord account; kept healthy.'}
+    ]};
+    await context.pollMonitor();
+    assert.equal(el('monitor-status').textContent, 'Setup finished with errors');
+    assert.match(el('monitor-progress').textContent, /3 assigned · 1 failed · 1 duplicates removed/);
+    const resultText = el('monitor-results').children.map(child => child.textContent).join(' ');
+    assert.match(resultText, /Needs attention \(1\)/);
+    assert.match(resultText, /Duplicates removed \(1\)/);
+    assert.match(resultText, /Assigned \(1\)/);
+    assert(!resultText.includes('confirmed'), 'Setup must not use withdrawal result labels');
     reject = true;
     el('monitor-token').value = 'invalid-synthetic';
     await context.saveMonitor();
@@ -87,8 +101,13 @@ class Element {
     el('bulk-tokens').value = 'synthetic-one\nsynthetic-two';
     await context.submitBulkImport();
     assert.equal(calls.find(call => call.url === '/api/accounts/bulk').body.channels, '');
+    vm.runInContext('accountConfigList = [{name: "broken", channel_setup: {status: "failed", reason: "Invalid <token>"}}]', context);
+    renderAccounts();
+    assert.match(el('account-config-list').innerHTML, /Needs attention \(1\)/);
+    assert.match(el('account-config-list').innerHTML, /CHANNEL SETUP FAILED/);
+    assert.match(el('account-config-list').innerHTML, /Invalid &lt;token&gt;/);
     expire = true;
     await context.pollMonitor();
     assert.equal(context.location.href, '/login?expired=1');
-    console.log('PASS: saved settings, dirty edits, token-save ordering, CSRF, Discord 401 recovery, session expiry, token-only add/import, template IDs');
+    console.log('PASS: saved settings, dirty edits, token-save ordering, CSRF, Discord 401 recovery, session expiry, token-only add/import, template IDs, partial setup summaries, grouped account errors');
 })().catch(error => { console.error(error); process.exitCode = 1; });

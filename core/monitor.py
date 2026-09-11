@@ -184,6 +184,23 @@ def channel_groups(accounts):
     return [ordered[i:i + 3] for i in range(0, len(ordered), 3)]
 
 
+class AccountSetupError(ValueError):
+    """An account-specific, credential-free setup failure."""
+
+
+def setup_error(exc, stage):
+    if isinstance(exc, AccountSetupError):
+        return str(exc)
+    if isinstance(exc, DiscordError):
+        if exc.status == 404 and stage == 'membership':
+            return 'Account is not a member of the selected server. Join it, then retry setup.'
+        return f'{stage.capitalize()} failed (Discord HTTP {exc.status}). Check access and retry.'
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+        return f'{stage.capitalize()} timed out. Check the connection or proxy and retry.'
+    # Network/proxy exceptions may contain authenticated URLs. Never expose them.
+    return f'{stage.capitalize()} failed ({type(exc).__name__}). Check the account token or proxy and retry.'
+
+
 async def _identify_account(owner, account):
     # Use the account's own proxy. Only a read-only identity lookup, no gateway login.
     from utils import proxy_manager
@@ -199,10 +216,11 @@ async def _identify_account(owner, account):
         async with session.get('https://discord.com/api/v9/users/@me',
                 headers={'Authorization': account['token']}, **kwargs) as response:
             if response.status != 200:
-                raise ValueError(f"Could not verify {account['name']} (HTTP {response.status})")
+                raise AccountSetupError('Account token was rejected (HTTP 401). Replace its token and retry.'
+                    if response.status == 401 else f'Account verification failed (HTTP {response.status}). Check the account and retry.')
             user = await response.json()
             if user.get('bot'):
-                raise ValueError(f"{account['name']} is a bot, not an OwO account")
+                raise AccountSetupError('This token belongs to a bot, not an OwO account.')
             return str(user['id'])
 
 
@@ -218,68 +236,133 @@ async def provision(owner):
     accounts = proxy_manager.load_accounts(owner)
     if not accounts:
         raise ValueError('Add accounts first; channel IDs may be left empty')
+    expected = copy.deepcopy(accounts)
     progress = _operations[owner]
+    rows = progress['results'] = []
     progress.update(stage='verifying accounts', total=len(accounts), done=0)
+    kept, eligible = [], []
+    seen_tokens, seen_users = {}, {}
+
+    def commit():
+        # Compare the full source snapshot: do not erase concurrent config edits.
+        # Save each completed group so a later request failure loses no assignments.
+        nonlocal expected
+        with proxy_manager._FILE_LOCK:
+            if proxy_manager.load_accounts(owner) != expected or supervisor.running_names(owner):
+                raise ValueError('Accounts changed during setup; retry with all accounts stopped')
+            proxy_manager.save_accounts(owner, kept)
+            proxy_manager.sync_proxy_assignments(owner)
+            expected = copy.deepcopy(kept)
+            for row in rows:
+                if row['status'] == 'duplicate_pending':
+                    row['status'] = 'duplicate_removed'
+
+    def mark(account, row, status, reason='', **extra):
+        row.update(status=status, reason=reason, **extra)
+        account['channel_setup'] = dict(status=status, reason=reason, at=time.time(), **extra)
+
     async with BotAPI(cfg.get('token')) as api:
+        # Shared setup errors (monitor credentials, server access, missing OwO)
+        # still stop the job; individual account failures below do not.
         me = await api.request('GET', '/users/@me')
         guild = await api.request('GET', f'/guilds/{guild_id}')
         owner_id = guild['owner_id']
         await api.request('GET', f'/guilds/{guild_id}/members/408785106942164992')
-        # Verify all identities/membership before creating any channel.
-        seen = set()
         for index, account in enumerate(accounts):
-            uid = await _identify_account(owner, account)
-            if uid in seen:
-                raise ValueError(f"Duplicate Discord account: {account['name']}")
-            seen.add(uid)
-            await api.request('GET', f'/guilds/{guild_id}/members/{uid}')
-            account['user_id'] = uid
-            progress['done'] = index + 1
-            await asyncio.sleep(0.4)
-        channels = await api.request('GET', f'/guilds/{guild_id}/channels')
+            row = {'name': account['name'], 'status': 'pending'}
+            rows.append(row)
+            token = str(account.get('token') or '').strip()
+            original = seen_tokens.get(token) if token else None
+            if original is not None:
+                row.update(status='duplicate_pending', kept_name=original['name'],
+                           reason=f"Duplicate token; kept {original['name']}.")
+                progress['done'] = index + 1
+                continue
+            if token:
+                seen_tokens[token] = account
+            stage = 'verification'
+            try:
+                uid = await _identify_account(owner, account)
+                original = seen_users.get(uid)
+                if original is not None:
+                    if token:
+                        seen_tokens[token] = original
+                    row.update(status='duplicate_pending', kept_name=original['name'],
+                               reason=f"Same Discord account; kept {original['name']}.")
+                    continue
+                seen_users[uid] = account
+                account['user_id'] = uid
+                stage = 'membership'
+                await api.request('GET', f'/guilds/{guild_id}/members/{uid}')
+            except Exception as exc:
+                # 401 here uses the monitor's bot credentials, not the account's.
+                if stage == 'membership' and isinstance(exc, DiscordError) and exc.status in (401, 403):
+                    raise
+                mark(account, row, 'failed', setup_error(exc, stage))
+                kept.append(account)
+            else:
+                kept.append(account)
+                mark(account, row, 'pending', 'Verified; waiting for channel assignment.')
+                eligible.append((account, row))
+            finally:
+                progress['done'] = index + 1
+                await asyncio.sleep(0.4)
+        commit()
+        channels = await api.request('GET', f'/guilds/{guild_id}/channels') if eligible else []
         prefix = f'LazyFarmers:{owner}:'
         base = [{'id': guild_id, 'type': 0, 'deny': str(VIEW), 'allow': '0'},
                 {'id': me['id'], 'type': 1, 'allow': str(ACCESS), 'deny': '0'},
                 {'id': owner_id, 'type': 1, 'allow': str(ACCESS), 'deny': '0'}]
-        for index, group in enumerate(channel_groups(accounts)):
-            # Discord categories hold at most 50 channels; use 49 farm channels per category.
-            category_name = f'farm-{owner}-{index // 49 + 1}'
-            category = next((c for c in channels if c['type'] == 4 and c['name'] == category_name), None)
-            if category is None:
-                category = await api.request('POST', f'/guilds/{guild_id}/channels',
-                    {'name': category_name, 'type': 4, 'permission_overwrites': base})
-                channels.append(category)
-            topic = prefix + f'group:{index + 1}'
-            channel = next((c for c in channels if c.get('topic') == topic and c['type'] == 0), None)
-            permissions = base + [{'id': a['user_id'], 'type': 1, 'allow': str(ACCESS), 'deny': '0'}
-                                  for a in group if a['user_id'] not in (owner_id, me['id'])]
-            # OwO must also be able to read and reply inside the private channel.
-            permissions.append({'id': '408785106942164992', 'type': 1, 'allow': str(ACCESS), 'deny': '0'})
-            body = {'name': f'farm-{index + 1:03d}', 'type': 0, 'parent_id': category['id'],
-                    'topic': topic, 'permission_overwrites': permissions}
-            if channel:
-                await api.request('PATCH', f"/channels/{channel['id']}", body)
+        groups = channel_groups([account for account, _ in eligible])
+        account_rows = {id(account): row for account, row in eligible}
+        assigned_channels = 0
+        progress.update(stage='creating channels', total=len(groups), done=0)
+        for index, group in enumerate(groups):
+            try:
+                category_name = f'farm-{owner}-{index // 49 + 1}'
+                category = next((c for c in channels if c['type'] == 4 and c['name'] == category_name), None)
+                if category is None:
+                    category = await api.request('POST', f'/guilds/{guild_id}/channels',
+                        {'name': category_name, 'type': 4, 'permission_overwrites': base})
+                    channels.append(category)
+                topic = prefix + f'group:{index + 1}'
+                channel = next((c for c in channels if c.get('topic') == topic and c['type'] == 0), None)
+                permissions = base + [{'id': a['user_id'], 'type': 1, 'allow': str(ACCESS), 'deny': '0'}
+                                      for a in group if a['user_id'] not in (owner_id, me['id'])]
+                permissions.append({'id': '408785106942164992', 'type': 1, 'allow': str(ACCESS), 'deny': '0'})
+                body = {'name': f'farm-{index + 1:03d}', 'type': 0, 'parent_id': category['id'],
+                        'topic': topic, 'permission_overwrites': permissions}
+                if channel:
+                    await api.request('PATCH', f"/channels/{channel['id']}", body)
+                else:
+                    channel = await api.request('POST', f'/guilds/{guild_id}/channels', body)
+                    channels.append(channel)
+            except Exception as exc:
+                if isinstance(exc, DiscordError) and exc.status == 401:
+                    raise
+                for account in group:
+                    mark(account, account_rows[id(account)], 'failed', setup_error(exc, 'channel assignment'))
             else:
-                channel = await api.request('POST', f'/guilds/{guild_id}/channels', body)
-                channels.append(channel)
-            for account in group:
-                account['channels'] = [channel['id']]
-            progress.update(stage='creating channels', done=index + 1, total=len(channel_groups(accounts)))
-        status_channel = next((c for c in channels if c.get('topic') == prefix + 'monitor'), None)
-        if status_channel is None:
-            status_channel = await api.request('POST', f'/guilds/{guild_id}/channels',
-                {'name': 'operations-overview', 'type': 0, 'topic': prefix + 'monitor',
-                 'permission_overwrites': base})
-        # Account credentials might have been edited while the operation awaited HTTP.
-        before = [(a.get('name'), a.get('token')) for a in accounts]
-        current = proxy_manager.load_accounts(owner)
-        if [(a.get('name'), a.get('token')) for a in current] != before or supervisor.running_names(owner):
-            raise ValueError('Accounts changed during setup; retry with all accounts stopped')
-        proxy_manager.save_accounts(owner, accounts)
-        save_config(owner, {'channel_id': status_channel['id'], 'owner_id': owner_id,
-                             'recipient_id': owner_id, 'enabled': True})
-    await restart(owner)
-    return {'channels': len(channel_groups(accounts)), 'accounts': len(accounts)}
+                assigned_channels += 1
+                for account in group:
+                    account['channels'] = [channel['id']]
+                    mark(account, account_rows[id(account)], 'assigned', channel_id=channel['id'])
+            commit()
+            progress['done'] = index + 1
+
+        if assigned_channels:
+            status_channel = next((c for c in channels if c.get('topic') == prefix + 'monitor'), None)
+            if status_channel is None:
+                status_channel = await api.request('POST', f'/guilds/{guild_id}/channels',
+                    {'name': 'operations-overview', 'type': 0, 'topic': prefix + 'monitor',
+                     'permission_overwrites': base})
+            save_config(owner, {'channel_id': status_channel['id'], 'owner_id': owner_id,
+                                 'recipient_id': owner_id, 'enabled': True})
+    if assigned_channels:
+        await restart(owner)
+    return {'channels': assigned_channels, 'accounts': sum(r['status'] == 'assigned' for r in rows),
+            'failed': sum(r['status'] == 'failed' for r in rows),
+            'duplicates_removed': sum(r['status'] == 'duplicate_removed' for r in rows)}
 
 
 def start_operation(owner, kind):
@@ -304,7 +387,7 @@ def start_operation(owner, kind):
                 result = {'checked': len(rows)}
             else:
                 raise ValueError('Unknown operation')
-            _operations[owner].update(status='complete', result=result)
+            _operations[owner].update(status='complete_with_errors' if kind == 'provision' and result.get('failed') else 'complete', result=result)
         except asyncio.CancelledError:
             _operations[owner]['status'] = 'cancelled'
             raise
@@ -372,7 +455,7 @@ def snapshot(owner):
                                   or (bot.paused and job.get('status') in ('queued', 'solving', 'retrying', 'manual_required')))))
         result['queued'] += int(bool(bot and bot.paused and job.get('status') in ('queued', 'retrying')))
         result['attention'] += int(not ready or bool(bot and bot.paused))
-        result['failed'] += int(account.get('status') not in (None, '', 'ok'))
+        result['failed'] += int(account.get('status') not in (None, '', 'ok') or account.get('channel_setup', {}).get('status') == 'failed')
         cash = st.get('current_cash') if st.get('last_cash_update') else None
         fresh = cash is not None and now - st['last_cash_update'] < 900
         result['cached'] += int(cash is not None)

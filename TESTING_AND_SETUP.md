@@ -55,7 +55,8 @@ not yet validated against live Discord accounts or a paid NopeCHA session.
    collapsed by default. Stop any running accounts before continuing.
 6. Load servers, choose one by name, and press Create & assign channels. Progress
    is shown on the page. Setup verifies identities and server membership first,
-   creates one private channel per three accounts, saves assignments, creates
+   skips and reports individual account failures, removes proven duplicate entries,
+   creates one private channel per three healthy accounts, saves assignments, creates
    `operations-overview`, and starts the monitor.
 7. Start your accounts from the Accounts page. They still do not auto-start on
    process boot. The configured monitor can reconnect on boot.

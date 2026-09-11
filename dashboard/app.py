@@ -1588,13 +1588,16 @@ def account_export():
     # raw tokens leave the box here, so it is strictly the caller's own space
     accounts = proxy_manager.load_accounts(g.owner)
     if only_problem:
-        accounts = [a for a in accounts if a.get('status', 'ok') != 'ok']
+        accounts = [a for a in accounts if a.get('status', 'ok') != 'ok'
+                    or a.get('channel_setup', {}).get('status') == 'failed']
 
     lines = []
     for account in accounts:
         parts = [str(account.get('name', 'unnamed')), str(account.get('token', ''))]
         if account.get('status', 'ok') != 'ok':
             parts.append(f"{account.get('status')} - {account.get('status_reason') or ''}".strip())
+        if account.get('channel_setup', {}).get('status') == 'failed':
+            parts.append('channel setup failed - ' + account['channel_setup'].get('reason', ''))
         lines.append(':'.join(parts))
 
     body = '\n'.join(lines) + ('\n' if lines else '')

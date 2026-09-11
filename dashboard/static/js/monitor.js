@@ -26,10 +26,19 @@ function renderMonitorConfig() {
     const error = monitorActionError || op.error || (runtimeError ? runtime : '');
     panel.dataset.state = error ? 'error' : 'normal';
     panel.textContent = error || `${runtime} · ${cfg.guild_name || 'No server selected'}${op.kind ? ` · ${op.kind}: ${op.status}` : ''}${op.stage ? ` · ${op.stage} ${op.done || 0}/${op.total || 0}` : ''}`;
+    if (op.kind === 'provision' && op.result && !error) {
+        const result = op.result;
+        panel.textContent = `${result.accounts} assigned · ${result.failed || 0} failed · ${result.duplicates_removed || 0} duplicates removed · ${result.channels} channels`;
+        panel.dataset.state = result.failed ? 'warning' : 'normal';
+    }
     const badge = document.getElementById('monitor-status');
     badge.dataset.state = error ? 'error' : 'normal';
     badge.textContent = error ? 'Needs attention' : runtime === 'connected' ? 'Connected' :
         !cfg.token_set ? 'Not configured' : !cfg.channel_id ? 'Setup needed' : runtime === 'connecting' ? 'Connecting' : 'Stopped';
+    if (!error && op.status === 'complete_with_errors') {
+        badge.textContent = 'Setup finished with errors';
+        badge.dataset.state = 'warning';
+    }
     document.getElementById('monitor-token').placeholder = cfg.token_set ? 'Token saved; leave empty to keep it' : 'Paste your monitor bot token';
     if (!monitorDirty.has('monitor-percent')) document.getElementById('monitor-percent').value = cfg.withdraw_percent ?? 100;
     if (!monitorDirty.has('monitor-enabled')) document.getElementById('monitor-enabled').checked = !!cfg.enabled;
@@ -46,6 +55,22 @@ function renderMonitorConfig() {
     }
     const results = document.getElementById('monitor-results');
     results.replaceChildren();
+    if (op.kind === 'provision') {
+        for (const [status, title] of [['failed', 'Needs attention'], ['duplicate_removed', 'Duplicates removed'], ['duplicate_pending', 'Duplicates found; removal pending'], ['pending', 'Waiting for assignment'], ['assigned', 'Assigned']]) {
+            const rows = (op.results || []).filter(row => row.status === status);
+            if (!rows.length) continue;
+            const heading = document.createElement('h3');
+            heading.textContent = `${title} (${rows.length})`;
+            results.append(heading);
+            for (const row of rows) {
+                const line = document.createElement('p');
+                line.dataset.state = status;
+                line.textContent = `${row.name} · ${row.reason || (row.channel_id ? `Channel ${row.channel_id}` : title)}`;
+                results.append(line);
+            }
+        }
+        return;
+    }
     for (const row of op.results || []) {
         const line = document.createElement('p');
         line.textContent = `${row.name}: ${row.status} · ${(row.confirmed_total || 0).toLocaleString()} confirmed${row.reason ? ` · ${row.reason}` : ''}`;

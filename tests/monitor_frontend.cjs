@@ -68,16 +68,18 @@ class Element {
     assert.equal(calls[before].headers.get('X-CSRF-Token'), 'synthetic-csrf');
     assert.equal(calls[before+1].url, '/api/monitor/servers');
     assert.equal(el('monitor-token').value, '');
-    config.operation = {kind: 'provision', status: 'complete_with_errors', result: {accounts: 3, failed: 1, duplicates_removed: 1, channels: 1}, results: [
+    config.operation = {kind: 'provision', status: 'complete_with_errors', result: {accounts: 3, failed: 1, awaiting: 1, duplicates_removed: 1, channels: 1}, results: [
         {name: 'healthy', status: 'assigned', channel_id: '12345'},
         {name: 'broken', status: 'failed', reason: 'Account token rejected'},
+        {name: 'never-started', status: 'awaiting_identity', reason: 'Start it once to get access', channel_id: '12345'},
         {name: 'copy', status: 'duplicate_removed', reason: 'Same Discord account; kept healthy.'}
     ]};
     await context.pollMonitor();
     assert.equal(el('monitor-status').textContent, 'Setup finished with errors');
-    assert.match(el('monitor-progress').textContent, /3 assigned · 1 failed · 1 duplicates removed/);
+    assert.match(el('monitor-progress').textContent, /3 assigned · 1 waiting for a first connection · 1 failed · 1 duplicates removed/);
     const resultText = el('monitor-results').children.map(child => child.textContent).join(' ');
     assert.match(resultText, /Needs attention \(1\)/);
+    assert.match(resultText, /start the account once to get access \(1\)/);
     assert.match(resultText, /Duplicates removed \(1\)/);
     assert.match(resultText, /Assigned \(1\)/);
     assert(!resultText.includes('confirmed'), 'Setup must not use withdrawal result labels');

@@ -42,7 +42,7 @@ class IdentityTests(unittest.IsolatedAsyncioTestCase):
             await monitor._identify_account('admin', self.account)
         self.assertNotIn('private', str(caught.exception))
         self.assertNotIn('Replace its token', str(caught.exception))
-        self.assertIn('login check was rejected', str(caught.exception))
+        self.assertIn('not proof the token is dead', str(caught.exception))
         self.client.close.assert_awaited_once()
 
     async def test_http_error_is_not_reported_as_proof_of_invalid_token(self):

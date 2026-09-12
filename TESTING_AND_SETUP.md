@@ -30,7 +30,7 @@ not yet validated against live Discord accounts or a paid NopeCHA session.
   configured/connected/ready accounts, attention flags, total cached cowoncy,
   estimated withdrawable funds, sampled 1-hour/24-hour net changes, and the top
   account. Confirmed withdrawals are added back when computing net changes.
-- The website creates private channels in groups of three verified accounts.
+- The website creates public channels in groups of three saved accounts.
   Re-running setup reuses channels by their managed topic. Large farms are split
   across categories. No channel IDs need to be entered manually.
 
@@ -54,14 +54,13 @@ not yet validated against live Discord accounts or a paid NopeCHA session.
 5. Add/import your accounts with tokens. Manual channel fields are optional and
    collapsed by default. Stop any running accounts before continuing.
 6. Load servers, choose one by name, and press Create & assign channels. Progress
-   is shown on the page. Setup verifies identities and server membership first,
-   skips and reports individual account failures, removes proven duplicate entries,
-   creates one private channel per three healthy accounts, saves assignments, creates
+   is shown on the page. Setup preserves all account rows without testing tokens
+   or membership. It creates one public channel per three saved accounts, saves assignments, creates
    `operations-overview`, and starts the monitor.
 7. Start your accounts from the Accounts page. They still do not auto-start on
    process boot. The configured monitor can reconnect on boot.
-8. The server owner is the withdrawal recipient and the only person allowed to
-   use the Discord Withdraw button. The authenticated website space can also
+8. Set `owner.user_id` in website Configuration. This configured ID is the
+   withdrawal recipient and authorizes the Discord Withdraw button. The authenticated website space can also
    start a withdrawal. The percentage is configurable, defaulting to 100% of
    eligible balance, capped by each sender's estimated remaining daily allowance.
 
@@ -86,7 +85,8 @@ The published OwO source, accessed 2026-09-10, computes:
 
 This differs from the reported 64,000 at level 0. The public source may differ
 from the current deployment; these are **estimates, not a promise of allowance**.
-The monitor excludes unknown levels from estimated withdrawable funds. Set
+The monitor shows unknown limits separately in its estimate and lets OwO check
+them when sending. Explicit sender-limit rejections can reduce the transfer amount. Set
 `owner.limit_mode` to `fixed` and `owner.daily_send_limit` to an observed limit if
 needed. Otherwise `limit_mode=level` uses the account's existing level tracker.
 The local ledger rolls over at UTC midnight. Actual server refusals override its
@@ -119,9 +119,8 @@ workflow repeats the offline checks without secrets.
 
 Before using a live farm, validate in a small test server with three accounts:
 
-- Verify one channel contains only the intended accounts, OwO, the monitor, and
-  the server owner. Accounts with Administrator permission can still see private
-  channels, as dictated by Discord.
+- Verify the managed farm channels and overview are visible to server members,
+  including channels migrated from an earlier private setup.
 - Confirm the monitor edits one message and rejects a non-owner button click.
 - Exercise one real captcha with your configured NopeCHA key and browser. Solver
   failures stay visible; automated solving cannot be guaranteed for every challenge.
@@ -131,6 +130,7 @@ Before using a live farm, validate in a small test server with three accounts:
 
 Performance figures are sampled balance changes, not audited income. Cash
 sampling frequency/retention can produce a shorter history than the displayed
-window. Unknown/stale balances are excluded from the withdrawable estimate.
+window. Unknown balances are excluded; cached balances and unknown limits are
+shown separately from fresh, known-limit funds.
 There is no USD valuation. No software can guarantee 100% transfer success when
 Discord/OwO rejects a request or the network loses the final response.

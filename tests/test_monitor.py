@@ -37,7 +37,12 @@ class FakeAPI:
 
 
 class MonitorTests(unittest.IsolatedAsyncioTestCase):
-    async def test_seven_accounts_get_three_private_channels_and_rerun_reuses_them(self):
+    def setUp(self):
+        self.owner_patch = patch.object(monitor, 'configured_owner_ids', return_value=['67890'])
+        self.owner_patch.start()
+        self.addCleanup(self.owner_patch.stop)
+
+    async def test_seven_accounts_get_three_public_channels_and_rerun_reuses_them(self):
         owner = 'u_abcdef'
         accounts = [{'name': f'acc{i}', 'token': f'synthetic-{i}', 'channels': []} for i in range(7)]
         proxy_manager.save_accounts(owner, accounts)
@@ -59,10 +64,10 @@ class MonitorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(groups), 3)
         for c in groups:
             overwrites = c['permission_overwrites']
-            self.assertTrue(any(p['id'] == '22222' and p['deny'] == '1024' for p in overwrites))
-            self.assertTrue(any(p['id'] == '408785106942164992' for p in overwrites))
+            self.assertTrue(any(p['id'] == '22222' and p['deny'] == '0' and int(p['allow']) & monitor.VIEW for p in overwrites))
+            self.assertTrue(any(p['id'] == '99999' for p in overwrites))
         self.assertNotIn('token', monitor.public_config(owner))
-        self.assertEqual(monitor.load_config(owner)['recipient_id'], '67890')
+        self.assertEqual(monitor.public_config(owner)['recipient_id'], '67890')
 
     async def test_nonowner_button_cannot_start_withdrawal(self):
         owner = 'u_ababab'
@@ -173,13 +178,14 @@ class MonitorTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result['stale_balance_accounts'], int(name == 'stale cash'))
                 text = monitor.build_message(result)['embeds'][0]['fields'][2]['value']
                 self.assertNotIn('Unknown limits', text)
-                self.assertEqual('needs level sync' in text, expected[2] > 0)
+                self.assertEqual('unknown daily limit' in text, expected[2] > 0)
 
     def test_missing_recipient_has_no_withdrawal_estimate(self):
         owner = 'u_abcdad'
         spaces.ensure_space(owner)
         proxy_manager.save_accounts(owner, [{'name': 'acc1', 'user_id': '12345'}])
         monitor.save_config(owner, {'recipient_id': ''})
+        monitor.configured_owner_ids.return_value = []
         bot = SimpleNamespace(account_name='acc1', user=SimpleNamespace(id=12345), active=True,
             is_ready=True, paused=False, stats={'current_cash': 90000, 'last_cash_update': time.time(), 'level': 1}, config={'owner': {}})
         with patch.object(state, 'bots_for', return_value=[bot]), patch.object(history_tracker, 'get_db', side_effect=RuntimeError):

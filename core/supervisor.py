@@ -135,6 +135,10 @@ def _open_space_history(owner):
 
 async def start_account(account, owner=spaces.ADMIN_SPACE, proxies=None):
     owner = spaces.normalise_owner(owner)
+    from core import monitor
+    operation = monitor._operations.get(owner, {})
+    if operation.get('status') == 'running' and operation.get('kind') in ('provision', 'recreate'):
+        return False, 'Wait for channel assignment to finish before starting accounts'
     name = account.get('name') or 'unnamed'
     if find_bot(owner, name):
         return False, f"{name} is already running"
@@ -395,6 +399,10 @@ def start_sequence(owner, accounts):
     should be held open for that.
     """
     owner = spaces.normalise_owner(owner)
+    from core import monitor
+    operation = monitor._operations.get(owner, {})
+    if operation.get('status') == 'running' and operation.get('kind') in ('provision', 'recreate'):
+        return False, 'Wait for channel assignment to finish before starting accounts'
     seq = _sequences.get(owner)
     if seq and not seq['task'].done():
         return False, "this space is already starting accounts - let it finish"

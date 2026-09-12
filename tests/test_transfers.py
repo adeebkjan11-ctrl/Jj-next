@@ -123,16 +123,52 @@ class TransferTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.cog._remaining_today(), 12000)
         self.assertEqual(self.bot.stats['owner_send']['sent'], 0)
 
-    async def test_unknown_level_and_paused_accounts_do_not_send_give(self):
+    async def test_unknown_level_sends_and_paused_account_does_not(self):
         self.bot.send_message = AsyncMock(side_effect=self.setup_send)
         self.bot.stats['level'] = None
+        async def click(**kwargs):
+            await self.cog.on_owo_gateway_message({'d': {'id': '90000',
+                'content': '<@12345> sent 64,000 cowoncy to <@67890>!'}})
+        self.bot.interactions.click_button_raw.side_effect = click
         result = await self.cog.withdraw('67890')
-        self.assertEqual(result['status'], 'skipped')
-        self.assertEqual(self.bot.send_message.await_count, 1)
+        self.assertEqual(result['status'], 'confirmed')
+        self.assertEqual(self.bot.send_message.await_args_list[1].args[0], 'owo send <@67890> 64000')
         self.bot.paused = True
         await self.cog.withdraw('67890')
-        self.assertEqual(self.bot.send_message.await_count, 1)
+        self.assertEqual(self.bot.send_message.await_count, 2)
 
+    async def test_unknown_limit_rejection_retries_reported_allowance(self):
+        self.bot.stats['level'] = None
+        async def send(text, **kwargs):
+            if text == 'owo cash':
+                return await self.setup_send(text, **kwargs)
+            if text.endswith('64000'):
+                await self.cog._observe({'channel_id': '11111', 'id': '91000',
+                    'content': '<@12345>, you can only send **12,000** more cowoncy today!'})
+            else:
+                self.assertEqual(text, 'owo send <@67890> 12000')
+                await self.cog.on_owo_gateway_message({'d': self.prompt(12000)})
+            return True
+        async def click(**kwargs):
+            await self.cog.on_owo_gateway_message({'d': {'id': '90000',
+                'content': '<@12345> sent 12,000 cowoncy to <@67890>!'}})
+        self.bot.send_message = AsyncMock(side_effect=send)
+        self.bot.interactions.click_button_raw.side_effect = click
+        with patch('asyncio.sleep', AsyncMock()):
+            result = await self.cog.withdraw('67890')
+        self.assertEqual(result['confirmed_total'], 12000)
+        self.assertEqual(self.cog._remaining_today(), 0)
+        self.assertEqual(self.bot.send_message.await_count, 3)
+
+    async def test_balance_does_not_match_another_account_or_emoji_id(self):
+        self.cog._channel_id = '11111'
+        self.cog._cash = asyncio.get_running_loop().create_future()
+        await self.cog._observe({'channel_id': '11111',
+            'content': '<@54321> you currently have 99,000 cowoncy'})
+        self.assertFalse(self.cog._cash.done())
+        await self.cog._observe({'channel_id': '11111', 'components': [
+            {'type': 10, 'content': '<@12345> you currently have <:cowoncy:987654321> **__64,000__ cowoncy!**'}]})
+        self.assertEqual(self.cog._cash.result(), 64000)
 
     async def test_nested_components_v2_prompt_is_confirmed(self):
         self.bot.send_message = AsyncMock(side_effect=self.setup_send)

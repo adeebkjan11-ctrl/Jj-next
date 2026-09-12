@@ -26,9 +26,9 @@ function renderMonitorConfig() {
     const error = monitorActionError || op.error || (runtimeError ? runtime : '');
     panel.dataset.state = error ? 'error' : 'normal';
     panel.textContent = error || `${runtime} · ${cfg.guild_name || 'No server selected'}${op.kind ? ` · ${op.kind}: ${op.status}` : ''}${op.stage ? ` · ${op.stage} ${op.done || 0}/${op.total || 0}` : ''}`;
-    if (op.kind === 'provision' && op.result && !error) {
+    if (['provision', 'recreate'].includes(op.kind) && op.result && !error) {
         const result = op.result;
-        panel.textContent = `${result.accounts} assigned · ${result.awaiting || 0} waiting for a first connection · ${result.failed || 0} failed · ${result.duplicates_removed || 0} duplicates removed · ${result.channels} channels`;
+        panel.textContent = `${result.accounts} assigned · ${result.failed || 0} failed · ${result.channels} public channels`;
         panel.dataset.state = result.failed ? 'warning' : 'normal';
     }
     const badge = document.getElementById('monitor-status');
@@ -55,7 +55,7 @@ function renderMonitorConfig() {
     }
     const results = document.getElementById('monitor-results');
     results.replaceChildren();
-    if (op.kind === 'provision') {
+    if (['provision', 'recreate'].includes(op.kind)) {
         for (const [status, title] of [['failed', 'Needs attention'], ['awaiting_identity', 'Channel assigned; start the account once to get access'], ['duplicate_removed', 'Duplicates removed'], ['duplicate_pending', 'Duplicates found; removal pending'], ['pending', 'Waiting for assignment'], ['assigned', 'Assigned']]) {
             const rows = (op.results || []).filter(row => row.status === status);
             if (!rows.length) continue;
@@ -84,7 +84,7 @@ function renderMonitorSummary(s) {
         notes.push(`${(s.withdrawable ?? 0).toLocaleString()} OwO with fresh balances and known limits`);
     }
     if (s.pending_limit_accounts > 0) {
-        notes.push(`${s.pending_limit_amount.toLocaleString()} OwO needs level sync before withdrawal (${s.pending_limit_accounts} ${s.pending_limit_accounts === 1 ? 'account' : 'accounts'})`);
+        notes.push(`${s.pending_limit_amount.toLocaleString()} OwO has an unknown daily limit; the server will check it when sending (${s.pending_limit_accounts} ${s.pending_limit_accounts === 1 ? 'account' : 'accounts'})`);
     }
     if (s.stale_balance_accounts > 0) notes.push('Cached balances will be refreshed before sending');
     if (!monitorConfig.recipient_id && !monitorConfig.guild_id) notes.push('Set up your server to select the recipient');

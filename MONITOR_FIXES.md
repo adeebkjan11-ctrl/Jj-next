@@ -1,5 +1,19 @@
 # Public channel and withdrawal update
 
+## Discord commands
+
+The connected monitor bot registers these slash commands in the selected server on startup:
+
+- `/panel`: posts a fresh active panel in the current text channel. The previous panel's buttons no longer authorize actions.
+- `/setup_channels`: creates or reuses public farm channels and assigns every saved account.
+- `/recreate_channels confirm:true`: permanently deletes this space's managed farm and overview channels (including message history), recreates public channels, and saves the new account assignments. Unrelated channels and other spaces are preserved; a category containing unrelated channels is kept.
+
+Only IDs in website Configuration `owner.user_id` can use these commands. Stop accounts before setup or recreation. Account starts are blocked while either operation is running. Operations acknowledge the command before doing work and report progress and failures in the website Monitor Bot tab. A failed Discord acknowledgement cancels the queued command.
+
+Restart after updating to register the commands. The monitor must have Keep monitor connected enabled and a selected server; it can connect before an overview channel exists. Channel creation/deletion requires Manage Channels. Commands use Discord's [guild application command API](https://docs.discord.com/developers/interactions/application-commands).
+
+## Channel assignment and withdrawals
+
 - Create & assign channels preserves every saved account row and proxy setting. It does not log into accounts, check membership, or remove duplicates. Existing managed categories, farm channels, and operations-overview are made public when setup is run again.
 - Website Configuration `owner.user_id` controls the Discord button and withdrawal recipient. Selecting a server no longer assigns its owner as recipient. Saved owner changes take effect on the next action.
 - Withdrawals process every configured account with a per-account result. Running accounts use the same transfer function as `farmers send`; stopped or paused accounts are reported. One account failure does not abort the rest.

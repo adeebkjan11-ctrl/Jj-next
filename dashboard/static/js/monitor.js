@@ -26,7 +26,7 @@ function renderMonitorConfig() {
     const error = monitorActionError || op.error || (runtimeError ? runtime : '');
     panel.dataset.state = error ? 'error' : 'normal';
     panel.textContent = error || `${runtime} · ${cfg.guild_name || 'No server selected'}${op.kind ? ` · ${op.kind}: ${op.status}` : ''}${op.stage ? ` · ${op.stage} ${op.done || 0}/${op.total || 0}` : ''}`;
-    if (op.kind === 'provision' && op.result && !error) {
+    if (['provision', 'recreate'].includes(op.kind) && op.result && !error) {
         const result = op.result;
         panel.textContent = `${result.accounts} assigned · ${result.failed || 0} failed · ${result.channels} public channels`;
         panel.dataset.state = result.failed ? 'warning' : 'normal';
@@ -55,7 +55,7 @@ function renderMonitorConfig() {
     }
     const results = document.getElementById('monitor-results');
     results.replaceChildren();
-    if (op.kind === 'provision') {
+    if (['provision', 'recreate'].includes(op.kind)) {
         for (const [status, title] of [['failed', 'Needs attention'], ['awaiting_identity', 'Channel assigned; start the account once to get access'], ['duplicate_removed', 'Duplicates removed'], ['duplicate_pending', 'Duplicates found; removal pending'], ['pending', 'Waiting for assignment'], ['assigned', 'Assigned']]) {
             const rows = (op.results || []).filter(row => row.status === status);
             if (!rows.length) continue;

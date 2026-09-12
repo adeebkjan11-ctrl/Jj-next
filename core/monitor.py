@@ -29,6 +29,13 @@ READ = 65536
 EMBED = 16384
 ATTACH = 32768
 ACCESS = VIEW | SEND | READ | EMBED | ATTACH
+COMMANDS = [
+    {'name': 'panel', 'description': 'Post the active monitor panel in this text channel', 'type': 1},
+    {'name': 'setup_channels', 'description': 'Create or reuse public farm channels and reassign saved accounts', 'type': 1},
+    {'name': 'recreate_channels', 'description': 'Delete this monitor\'s channels and history, recreate and reassign', 'type': 1,
+     'options': [{'name': 'confirm', 'description': 'Confirm permanent deletion of managed channels and their messages',
+                  'type': 5, 'required': True}]},
+]
 
 
 def normalize_token(token):
@@ -306,10 +313,17 @@ async def resolve_identity(owner, account):
         return uid, 'recorded'
 
 
+def accounts_running_or_starting(owner):
+    from core import supervisor
+    sequence = getattr(supervisor, '_sequences', {}).get(owner)
+    return bool(supervisor.running_names(owner) or
+                (sequence and sequence.get('task') and not sequence['task'].done()))
+
+
 async def provision(owner):
     from core import supervisor
     from utils import proxy_manager
-    if supervisor.running_names(owner):
+    if accounts_running_or_starting(owner):
         raise ValueError('Stop the accounts before assigning channels')
     cfg = load_config(owner)
     guild_id = cfg.get('guild_id')
@@ -329,7 +343,7 @@ async def provision(owner):
     def commit():
         nonlocal expected
         with proxy_manager._FILE_LOCK:
-            if proxy_manager.load_accounts(owner) != expected or supervisor.running_names(owner):
+            if proxy_manager.load_accounts(owner) != expected or accounts_running_or_starting(owner):
                 raise ValueError('Accounts changed during setup; retry with all accounts stopped')
             proxy_manager.save_accounts(owner, kept)
             expected = copy.deepcopy(kept)
@@ -467,15 +481,79 @@ async def grant_channel_access(owner, name, user_id):
     return True
 
 
-def start_operation(owner, kind):
+async def recreate_channels(owner):
+    """Rebuild only this space's topic-marked text channels and empty categories."""
+    from core import supervisor
+    from utils import proxy_manager
+    if accounts_running_or_starting(owner):
+        raise ValueError('Stop the accounts before recreating channels')
+    cfg = load_config(owner)
+    guild_id = cfg.get('guild_id')
+    if not guild_id or not proxy_manager.load_accounts(owner):
+        raise ValueError('Select a server and add accounts before recreating channels')
+    service = _services.get(owner)
+    lock = service.publish_lock if service else asyncio.Lock()
+    async with lock:
+        async with BotAPI(cfg.get('token')) as api:
+            channels = await api.request('GET', f'/guilds/{guild_id}/channels')
+            prefix = f'LazyFarmers:{owner}:'
+            managed = [c for c in channels if c.get('type') == 0 and
+                       (c.get('topic') == prefix + 'monitor' or
+                        re.fullmatch(re.escape(prefix) + r'group:\d+', c.get('topic') or ''))]
+            ids = {str(c['id']) for c in managed}
+            categories = [c for c in channels if c.get('type') == 4 and
+                          re.fullmatch(r'farm-' + re.escape(owner) + r'-\d+', c.get('name', '')) and
+                          all(str(child['id']) in ids for child in channels
+                              if str(child.get('parent_id')) == str(c['id']))]
+            progress = _operations[owner]
+            progress.update(stage='deleting managed channels', total=len(managed) + len(categories), done=0)
+            for channel in managed + categories:
+                if accounts_running_or_starting(owner):
+                    raise ValueError('Stop the accounts before recreating channels')
+                channel_id = str(channel['id'])
+                try:
+                    await api.request('DELETE', f'/channels/{channel_id}')
+                except DiscordError as exc:
+                    if exc.status != 404:
+                        raise
+                # Persist each deletion so partial failure cannot leave account
+                # rows pointing at channels this operation has already removed.
+                with proxy_manager._FILE_LOCK:
+                    accounts = proxy_manager.load_accounts(owner)
+                    changed = False
+                    for account in accounts:
+                        old = account.get('channels') or []
+                        new = [cid for cid in old if str(cid) != channel_id]
+                        if new != old:
+                            account['channels'] = new
+                            account['channel_setup'] = {'status': 'pending', 'reason': 'Waiting for replacement channel'}
+                            changed = True
+                    if changed:
+                        proxy_manager.save_accounts(owner, accounts)
+                if str(load_config(owner).get('channel_id')) == channel_id:
+                    save_config(owner, {'channel_id': None, 'message_id': None})
+                progress['done'] += 1
+    result = await provision(owner)
+    return dict(result, deleted_channels=len(managed), deleted_categories=len(categories))
+
+
+def start_operation(owner, kind, *, channel_id=None, start_after=None):
     task = _tasks.get(owner)
     if task and not task.done():
         return {'success': False, 'error': 'An operation is already in progress'}
     _operations[owner] = {'kind': kind, 'status': 'running', 'started_at': time.time(), 'results': []}
     async def run():
         try:
+            if start_after is not None:
+                await start_after.wait()
             if kind == 'provision':
                 result = await provision(owner)
+            elif kind == 'recreate':
+                result = await recreate_channels(owner)
+            elif kind == 'panel':
+                service = _services.get(owner) or Monitor(owner)
+                async with BotAPI(load_config(owner).get('token')) as api:
+                    result = await service.post_panel(api, channel_id)
             elif kind == 'withdraw':
                 result = await withdraw_all(owner)
             elif kind == 'reconcile':
@@ -489,7 +567,7 @@ def start_operation(owner, kind):
                 result = {'checked': len(rows)}
             else:
                 raise ValueError('Unknown operation')
-            _operations[owner].update(status='complete_with_errors' if kind == 'provision' and result.get('failed') else 'complete', result=result)
+            _operations[owner].update(status='complete_with_errors' if kind in ('provision', 'recreate') and result.get('failed') else 'complete', result=result)
         except asyncio.CancelledError:
             _operations[owner]['status'] = 'cancelled'
             raise
@@ -672,8 +750,32 @@ class Monitor:
         self.ack = True
         self.last_interactions = set()
         self.last_publish = 0
+        self.publish_lock = asyncio.Lock()
+
+    async def register_commands(self, api):
+        cfg = load_config(self.owner)
+        application = await api.request('GET', '/oauth2/applications/@me')
+        for command in COMMANDS:
+            # Upsert only our commands; preserve other commands owned by this bot.
+            await api.request('POST', f"/applications/{application['id']}/guilds/{cfg['guild_id']}/commands", command)
+
+    async def post_panel(self, api, channel_id):
+        async with self.publish_lock:
+            cfg = load_config(self.owner)
+            channel = await api.request('GET', f'/channels/{channel_id}')
+            if str(channel.get('guild_id')) != str(cfg.get('guild_id')) or channel.get('type') != 0:
+                raise ValueError('Use /panel in a text channel in the configured server')
+            body = build_message(await asyncio.to_thread(snapshot, self.owner))
+            message = await api.request('POST', f'/channels/{channel_id}/messages', body)
+            save_config(self.owner, {'channel_id': str(channel_id), 'message_id': message['id']})
+            self.last_publish = time.time()
+            return {'channel_id': str(channel_id), 'message_id': message['id']}
 
     async def publish(self, api):
+        async with self.publish_lock:
+            await self._publish(api)
+
+    async def _publish(self, api):
         cfg = load_config(self.owner)
         if not cfg.get('channel_id'):
             return
@@ -700,6 +802,9 @@ class Monitor:
         self.last_interactions.add(data['id'])
         if len(self.last_interactions) > 1000:
             self.last_interactions = {data['id']}
+        if data.get('type') == 2:
+            await self.command(data, cfg, actor)
+            return
         text = 'Only an owner ID saved in the website Configuration can use this control.'
         if valid and action == 'lf:withdraw':
             result = start_operation(self.owner, 'withdraw')
@@ -713,6 +818,42 @@ class Monitor:
             await callback.request('POST', f"/interactions/{data['id']}/{data['token']}/callback",
                 {'type': 4, 'data': {'content': text, 'flags': 64, 'allowed_mentions': {'parse': []}}})
 
+    async def command(self, data, cfg, actor):
+        from core import supervisor
+        request = data.get('data') or {}
+        name = request.get('name')
+        kind = {'panel': 'panel', 'setup_channels': 'provision', 'recreate_channels': 'recreate'}.get(name)
+        ready = None
+        text = 'Only a website-configured owner can use commands in the configured server.'
+        if (str(actor) in configured_owner_ids(self.owner) and cfg.get('guild_id')
+                and str(data.get('guild_id')) == str(cfg['guild_id'])):
+            if not kind:
+                text = 'Unknown monitor command.'
+            elif kind in ('provision', 'recreate') and accounts_running_or_starting(self.owner):
+                text = 'Stop the accounts before creating or recreating channels.'
+            elif kind == 'recreate' and not any(o.get('name') == 'confirm' and o.get('value') is True
+                                               for o in request.get('options', [])):
+                text = 'Use /recreate_channels confirm:true to delete managed channels and their messages, then rebuild.'
+            else:
+                ready = asyncio.Event()
+                result = start_operation(self.owner, kind, channel_id=data.get('channel_id'), start_after=ready)
+                if result['success']:
+                    text = 'Request queued. Progress and results are on the website Monitor Bot tab.'
+                else:
+                    text = result['error']
+                    ready = None
+        try:
+            async with BotAPI(cfg['token']) as callback:
+                await callback.request('POST', f"/interactions/{data['id']}/{data['token']}/callback",
+                    {'type': 4, 'data': {'content': text, 'flags': 64, 'allowed_mentions': {'parse': []}}})
+        except BaseException:
+            if ready is not None:
+                _tasks[self.owner].cancel()
+                _operations[self.owner]['status'] = 'cancelled'
+            raise
+        if ready is not None:
+            ready.set()
+
     async def _heartbeat(self, ws, interval):
         await asyncio.sleep(random.random() * interval)
         while not ws.closed:
@@ -725,7 +866,9 @@ class Monitor:
 
     async def _publisher(self, api):
         while True:
-            if time.time() - self.last_publish >= 60:
+            operation = _operations.get(self.owner, {})
+            rebuilding = operation.get('status') == 'running' and operation.get('kind') in ('provision', 'recreate', 'panel')
+            if not rebuilding and time.time() - self.last_publish >= 60:
                 try:
                     await self.publish(api)
                     self.last_publish = time.time()
@@ -736,6 +879,7 @@ class Monitor:
     async def run(self):
         cfg = load_config(self.owner)
         async with BotAPI(cfg.get('token')) as api:
+            await self.register_commands(api)
             gateway = await api.request('GET', '/gateway/bot')
             publisher = asyncio.create_task(self._publisher(api))
             try:
@@ -801,7 +945,7 @@ async def restart(owner):
         previous.task.cancel()
         await asyncio.gather(previous.task, return_exceptions=True)
     cfg = load_config(owner)
-    if cfg.get('enabled') and cfg.get('token') and cfg.get('channel_id'):
+    if cfg.get('enabled') and cfg.get('token') and cfg.get('guild_id'):
         monitor = Monitor(owner)
         _services[owner] = monitor
         async def run():

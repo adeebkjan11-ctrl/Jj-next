@@ -63,7 +63,7 @@ class Element {
     let withdrawalCard = el('monitor-summary').children[2];
     assert.equal(withdrawalCard.children[0].textContent, 'Available to withdraw (estimate)');
     assert.equal(withdrawalCard.children[1].textContent, (2950000).toLocaleString());
-    assert.match(withdrawalCard.children[2].textContent, /needs level sync before withdrawal \(59 accounts\)/);
+    assert.match(withdrawalCard.children[2].textContent, /unknown daily limit; the server will check it when sending \(59 accounts\)/);
     assert(!withdrawalCard.children[2].textContent.includes('unknown limits'));
     context.renderMonitorSummary({configured: 1, ready: 1, connected: 1, total_owo: 10000,
         withdrawable: 0, withdrawal_estimate: 5000, pending_limit_accounts: 0, stale_balance_accounts: 1, best: null});
@@ -91,7 +91,7 @@ class Element {
     ]};
     await context.pollMonitor();
     assert.equal(el('monitor-status').textContent, 'Setup finished with errors');
-    assert.match(el('monitor-progress').textContent, /3 assigned · 1 waiting for a first connection · 1 failed · 1 duplicates removed/);
+    assert.match(el('monitor-progress').textContent, /3 assigned · 1 failed · 1 public channels/);
     const resultText = el('monitor-results').children.map(child => child.textContent).join(' ');
     assert.match(resultText, /Needs attention \(1\)/);
     assert.match(resultText, /start the account once to get access \(1\)/);

@@ -268,7 +268,7 @@
                         <div class="monitor-form">
                             <label for="monitor-server">Server</label>
                             <select id="monitor-server" class="cfg-input"><option value="">Load servers first</option></select>
-                            <p class="monitor-hint">Creates one private channel per three accounts and assigns them automatically. No channel IDs needed.</p>
+                            <p class="monitor-hint">Creates one public channel per three saved accounts and assigns it automatically. Accounts are not tested or removed.</p>
                             <button type="button" class="btn-control green" onclick="setupMonitorChannels()">Create &amp; assign channels</button>
                         </div>
                     </section>
@@ -276,7 +276,7 @@
                 <section class="monitor-card monitor-activity" aria-labelledby="monitor-activity-title">
                     <div class="monitor-card-heading"><h2 id="monitor-activity-title">Activity &amp; withdrawals</h2></div>
                     <div id="monitor-progress" role="status" aria-live="polite">Loading monitor settings…</div>
-                    <p class="monitor-hint">Withdrawals go to the selected server's owner. Only that owner can use the Discord Withdraw button. The estimate uses cached balances and known daily limits. Amounts marked as needing level sync cannot be sent until the level is read or a fixed daily limit is configured in account settings. Balances are refreshed before sending; paused accounts and unresolved transfers are excluded.</p>
+                    <p class="monitor-hint">Set owner.user_id in website Configuration to choose the recipient and authorize the Discord Withdraw button. Each running account refreshes its balance and sends available OwO through the same flow as farmers send. OwO checks unknown daily limits when sending. Results include stopped, paused and failed accounts; unresolved transfers are not resent.</p>
                     <div class="monitor-actions">
                         <button type="button" class="btn-control green" onclick="withdrawMonitor()">Withdraw available OwO</button>
                         <button type="button" class="btn-control" onclick="reconcileWithdrawals()">Recheck uncertain receipts</button>

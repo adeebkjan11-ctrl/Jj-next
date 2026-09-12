@@ -16,6 +16,7 @@ from pathlib import Path
 
 import aiohttp
 from core import spaces
+from core.paths import CONFIG_DIR
 from core.withdrawal_limits import send_limit
 
 _lock = threading.RLock()
@@ -75,10 +76,34 @@ def save_config(owner, values):
 def public_config(owner):
     cfg = load_config(owner)
     result = {k: v for k, v in cfg.items() if k != 'token'}
+    ids = configured_owner_ids(owner)
+    result.update(owner_ids=ids, owner_id=ids[0] if ids else None,
+                  recipient_id=ids[0] if ids else None)
     result['token_set'] = bool(cfg.get('token'))
     result['operation'] = copy.deepcopy(_operations.get(owner, {}))
     result['runtime'] = _services[owner].status if owner in _services else 'stopped'
     return result
+
+
+def configured_owner_ids(owner):
+    """Read the website's owner configuration, never the selected guild owner.
+
+    Read on each action so saved owner changes revoke old controls immediately.
+    The space settings override the bundled/default settings like the bots do.
+    """
+    settings = {}
+    for path in (Path(CONFIG_DIR) / 'settings.json', Path(spaces.settings_path(owner))):
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+        except FileNotFoundError:
+            continue
+        values = data.get('owner', {})
+        if isinstance(values, dict):
+            settings.update(values)
+    value = settings.get('user_id', '')
+    values = value if isinstance(value, list) else re.split(r'[,\s]+', str(value or ''))
+    return list(dict.fromkeys(str(uid).strip() for uid in values
+                             if spaces.is_valid_discord_id(str(uid).strip())))
 
 
 class DiscordError(RuntimeError):
@@ -170,7 +195,7 @@ async def select_guild(owner, guild_id):
         guild = await api.request('GET', f'/guilds/{guild_id}')
     cfg = load_config(owner)
     values = {'guild_id': str(guild_id), 'guild_name': guild['name'],
-              'owner_id': guild['owner_id'], 'recipient_id': guild['owner_id']}
+              'owner_id': None, 'recipient_id': None}
     if str(cfg.get('guild_id')) != str(guild_id):
         values.update(channel_id=None, message_id=None, enabled=False)
     result = save_config(owner, values)
@@ -296,103 +321,33 @@ async def provision(owner):
     expected = copy.deepcopy(accounts)
     progress = _operations[owner]
     rows = progress['results'] = []
-    progress.update(stage='verifying accounts', total=len(accounts), done=0)
-    kept, eligible = [], []
-    seen_tokens, seen_users = {}, {}
-    # id(account) -> 'login' | 'recorded'. Which of the two an assignment rests on
-    # is worth saying out loud: "assigned on a recorded id" is the account to look
-    # at when its channel turns out to belong to whoever the token used to be.
-    identities = {}
-    RECORDED_NOTE = ('Assigned on the Discord ID recorded at this account\'s last successful start; '
-                     'Discord would not re-confirm it now.')
+    # Assign every saved row as-is. Provisioning never authenticates accounts,
+    # checks their membership, deduplicates them, or changes proxy assignments.
+    kept = accounts
+    rows.extend({'name': account['name'], 'status': 'pending'} for account in accounts)
 
     def commit():
-        # Compare the full source snapshot: do not erase concurrent config edits.
-        # Save each completed group so a later request failure loses no assignments.
         nonlocal expected
         with proxy_manager._FILE_LOCK:
             if proxy_manager.load_accounts(owner) != expected or supervisor.running_names(owner):
                 raise ValueError('Accounts changed during setup; retry with all accounts stopped')
             proxy_manager.save_accounts(owner, kept)
-            proxy_manager.sync_proxy_assignments(owner)
             expected = copy.deepcopy(kept)
-            for row in rows:
-                if row['status'] == 'duplicate_pending':
-                    row['status'] = 'duplicate_removed'
 
     def mark(account, row, status, reason='', **extra):
         row.update(status=status, reason=reason, **extra)
         account['channel_setup'] = dict(status=status, reason=reason, at=time.time(), **extra)
 
     async with BotAPI(cfg.get('token')) as api:
-        # Shared setup errors (monitor credentials, server access, missing OwO)
-        # still stop the job; individual account failures below do not.
         me = await api.request('GET', '/users/@me')
-        guild = await api.request('GET', f'/guilds/{guild_id}')
-        owner_id = guild['owner_id']
-        await api.request('GET', f'/guilds/{guild_id}/members/408785106942164992')
-        for index, account in enumerate(accounts):
-            row = {'name': account['name'], 'status': 'pending'}
-            rows.append(row)
-            token = str(account.get('token') or '').strip()
-            original = seen_tokens.get(token) if token else None
-            if original is not None:
-                row.update(status='duplicate_pending', kept_name=original['name'],
-                           reason=f"Duplicate token; kept {original['name']}.")
-                progress['done'] = index + 1
-                continue
-            if token:
-                seen_tokens[token] = account
-            stage = 'verification'
-            try:
-                uid, source = await resolve_identity(owner, account)
-                original = seen_users.get(uid)
-                if original is not None:
-                    if token:
-                        seen_tokens[token] = original
-                    row.update(status='duplicate_pending', kept_name=original['name'],
-                               reason=f"Same Discord account; kept {original['name']}.")
-                    continue
-                seen_users[uid] = account
-                account['user_id'] = uid
-                stage = 'membership'
-                await api.request('GET', f'/guilds/{guild_id}/members/{uid}')
-            except Exception as exc:
-                # 401 here uses the monitor's bot credentials, not the account's.
-                if stage == 'membership' and isinstance(exc, DiscordError) and exc.status in (401, 403):
-                    raise
-                kept.append(account)
-                if stage == 'membership':
-                    mark(account, row, 'failed', setup_error(exc, stage))
-                else:
-                    # Nobody knows who this account is yet, so there is no overwrite
-                    # to write - but refusing it a channel would also leave it
-                    # unstartable, and an account that cannot start can never
-                    # record the id that would fix this. Assign the channel and
-                    # let its first login close the loop.
-                    mark(account, row, 'awaiting_identity', f'{setup_error(exc, stage)} {AWAITING_HINT}')
-                    eligible.append((account, row))
-            else:
-                kept.append(account)
-                identities[id(account)] = source
-                mark(account, row, 'pending', 'Verified; waiting for channel assignment.' if source == 'login'
-                     else f'{RECORDED_NOTE} Waiting for channel assignment.')
-                eligible.append((account, row))
-            finally:
-                progress['done'] = index + 1
-                await asyncio.sleep(0.4)
-        commit()
-        # Always read the channel list, even with nothing to assign: the overview
-        # channel below is looked up in it, and an empty list would make every run
-        # create a second one.
         channels = await api.request('GET', f'/guilds/{guild_id}/channels')
         prefix = f'LazyFarmers:{owner}:'
-        base = [{'id': guild_id, 'type': 0, 'deny': str(VIEW), 'allow': '0'},
-                {'id': me['id'], 'type': 1, 'allow': str(ACCESS), 'deny': '0'},
-                {'id': owner_id, 'type': 1, 'allow': str(ACCESS), 'deny': '0'}]
-        groups = channel_groups([account for account, _ in eligible])
-        account_rows = {id(account): row for account, row in eligible}
+        base = [{'id': str(guild_id), 'type': 0, 'allow': str(ACCESS), 'deny': '0'},
+                {'id': me['id'], 'type': 1, 'allow': str(ACCESS), 'deny': '0'}]
+        groups = channel_groups(accounts)
+        account_rows = {id(account): row for account, row in zip(accounts, rows)}
         assigned_channels = 0
+        updated_categories = set()
         progress.update(stage='creating channels', total=len(groups), done=0)
         for index, group in enumerate(groups):
             try:
@@ -402,14 +357,14 @@ async def provision(owner):
                     category = await api.request('POST', f'/guilds/{guild_id}/channels',
                         {'name': category_name, 'type': 4, 'permission_overwrites': base})
                     channels.append(category)
+                elif category['id'] not in updated_categories:
+                    # Migrate categories made by older private-channel setup.
+                    await api.request('PATCH', f"/channels/{category['id']}",
+                                      {'permission_overwrites': base})
+                updated_categories.add(category['id'])
                 topic = prefix + f'group:{index + 1}'
                 channel = next((c for c in channels if c.get('topic') == topic and c['type'] == 0), None)
-                # A group may hold an account whose id is not known yet; it gets
-                # its overwrite from grant_channel_access() instead.
-                permissions = base + [{'id': uid, 'type': 1, 'allow': str(ACCESS), 'deny': '0'}
-                                      for uid in map(recorded_user_id, group)
-                                      if uid and uid not in (owner_id, me['id'])]
-                permissions.append({'id': '408785106942164992', 'type': 1, 'allow': str(ACCESS), 'deny': '0'})
+                permissions = base
                 body = {'name': f'farm-{index + 1:03d}', 'type': 0, 'parent_id': category['id'],
                         'topic': topic, 'permission_overwrites': permissions}
                 if channel:
@@ -427,13 +382,7 @@ async def provision(owner):
                 for account in group:
                     account['channels'] = [channel['id']]
                     row = account_rows[id(account)]
-                    if recorded_user_id(account):
-                        mark(account, row, 'assigned',
-                             '' if identities.get(id(account)) == 'login' else RECORDED_NOTE,
-                             channel_id=channel['id'])
-                    else:
-                        mark(account, row, 'awaiting_identity', row.get('reason') or AWAITING_HINT,
-                             channel_id=channel['id'])
+                    mark(account, row, 'assigned', channel_id=channel['id'])
             commit()
             progress['done'] = index + 1
 
@@ -448,8 +397,14 @@ async def provision(owner):
             status_channel = await api.request('POST', f'/guilds/{guild_id}/channels',
                 {'name': 'operations-overview', 'type': 0, 'topic': prefix + 'monitor',
                  'permission_overwrites': base})
-        save_config(owner, {'channel_id': status_channel['id'], 'owner_id': owner_id,
-                             'recipient_id': owner_id, 'enabled': True})
+        else:
+            await api.request('PATCH', f"/channels/{status_channel['id']}",
+                              {'permission_overwrites': base})
+        values = {'channel_id': status_channel['id'], 'owner_id': None,
+                  'recipient_id': None, 'enabled': True}
+        if str(cfg.get('channel_id')) != str(status_channel['id']):
+            values['message_id'] = None
+        save_config(owner, values)
     await restart(owner)
     return {'channels': assigned_channels, 'accounts': sum(r['status'] == 'assigned' for r in rows),
             'failed': sum(r['status'] == 'failed' for r in rows),
@@ -546,20 +501,40 @@ def start_operation(owner, kind):
 
 async def withdraw_all(owner):
     from core import state
+    from utils import proxy_manager
     cfg = load_config(owner)
-    recipient = str(cfg.get('recipient_id') or '')
+    recipient = next(iter(configured_owner_ids(owner)), '')
     if not recipient.isdigit():
-        raise ValueError('Complete server setup first')
-    results = _operations[owner]['results']
-    for bot in list(state.bots_for(owner)):
+        raise ValueError('Set owner.user_id in the website Configuration first')
+    progress = _operations[owner]
+    results = progress['results']
+    live = {bot.account_name: bot for bot in state.bots_for(owner)}
+    accounts = proxy_manager.load_accounts(owner)
+    progress.update(stage='withdrawing accounts', total=len(accounts), done=0)
+    recipient_limited = False
+    for account in accounts:
+        name = account['name']
+        bot = live.get(name)
+        if recipient_limited or bot is None:
+            results.append({'name': name, 'status': 'skipped', 'reason':
+                            'Recipient receive limit reached' if recipient_limited else 'Account is not running'})
+            progress['done'] += 1
+            continue
         cog = bot.get_cog('Owner')
         if cog is None:
-            results.append({'name': bot.account_name, 'status': 'skipped', 'reason': 'Owner module unavailable'})
+            results.append({'name': name, 'status': 'skipped', 'reason': 'Owner module unavailable'})
+            progress['done'] += 1
             continue
-        result = await cog.withdraw(recipient, percent=cfg.get('withdraw_percent', 100))
-        results.append(dict(result, name=bot.account_name))
-        if result.get('status') == 'recipient_limited':
-            break
+        progress['current_account'] = name
+        try:
+            result = await cog.withdraw(recipient, percent=cfg.get('withdraw_percent', 100))
+        except Exception as exc:
+            # One account must not abort the rest; exceptions can contain tokens.
+            result = {'status': 'failed', 'reason': type(exc).__name__}
+        results.append(dict(result, name=name))
+        recipient_limited = result.get('status') == 'recipient_limited'
+        progress['done'] += 1
+    progress.pop('current_account', None)
     return {'attempted': len(results), 'confirmed': sum(r.get('confirmed_total', 0) for r in results)}
 
 
@@ -572,6 +547,7 @@ def snapshot(owner):
     live = {b.account_name: b for b in state.bots_for(owner)}
     now = time.time()
     cfg = load_config(owner)
+    recipient = next(iter(configured_owner_ids(owner)), '')
     today = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
     result = {'configured': len(accounts), 'connected': 0, 'ready': 0, 'cached': 0,
               'captcha': 0, 'paused': 0, 'failed': 0, 'queued': 0, 'low_cash': 0,
@@ -621,7 +597,6 @@ def snapshot(owner):
         result['unknown_limits'] += int(remaining is None)
         # A withdrawal refreshes cash before sending. Keep its cached balance
         # estimate separate from the fresh, known-limit amount available now.
-        recipient = str(cfg.get('recipient_id') or '')
         eligible = bool(ready and getattr(bot, 'active', True) and not bot.paused
                         and recipient.isdigit() and uid != recipient)
         unresolved = st.get('withdrawal', {}).get('status') in ('sending', 'awaiting_confirmation', 'verifying', 'unknown')
@@ -668,7 +643,7 @@ def build_message(s):
     attention = s.get('attention', s['captcha'] + s['missing'])
     balance_note = f"`Available to withdraw (estimate)` **{s.get('withdrawal_estimate', s['withdrawable']):,}**\n`Fresh balance, known limit` **{s['withdrawable']:,}**"
     if s.get('pending_limit_accounts'):
-        balance_note += f"\n{s['pending_limit_amount']:,} OwO needs level sync before withdrawal ({s['pending_limit_accounts']} accounts)."
+        balance_note += f"\n{s['pending_limit_amount']:,} OwO has an unknown daily limit; the server will check it when sending ({s['pending_limit_accounts']} accounts)."
     if s.get('stale_balance_accounts'):
         balance_note += '\nCached balances will be refreshed before sending.'
     return {'embeds': [{'title': '🛰️ Operations Overview', 'color': 0x5865F2,
@@ -716,7 +691,7 @@ class Monitor:
     async def interact(self, api, data):
         cfg = load_config(self.owner)
         actor = (data.get('member', {}).get('user') or data.get('user') or {}).get('id')
-        valid = (str(actor) == str(cfg.get('owner_id')) and str(data.get('guild_id')) == str(cfg.get('guild_id'))
+        valid = (str(actor) in configured_owner_ids(self.owner) and str(data.get('guild_id')) == str(cfg.get('guild_id'))
                  and str(data.get('channel_id')) == str(cfg.get('channel_id'))
                  and str(data.get('message', {}).get('id')) == str(cfg.get('message_id')))
         action = (data.get('data') or {}).get('custom_id')
@@ -725,7 +700,7 @@ class Monitor:
         self.last_interactions.add(data['id'])
         if len(self.last_interactions) > 1000:
             self.last_interactions = {data['id']}
-        text = 'Only the configured server owner can use this control.'
+        text = 'Only an owner ID saved in the website Configuration can use this control.'
         if valid and action == 'lf:withdraw':
             result = start_operation(self.owner, 'withdraw')
             text = 'Withdrawal queued. Progress and per-account results are on the website.' if result['success'] else result['error']

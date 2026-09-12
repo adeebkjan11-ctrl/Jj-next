@@ -1,3 +1,19 @@
+# Public channel and withdrawal update
+
+- Create & assign channels preserves every saved account row and proxy setting. It does not log into accounts, check membership, or remove duplicates. Existing managed categories, farm channels, and operations-overview are made public when setup is run again.
+- Website Configuration `owner.user_id` controls the Discord button and withdrawal recipient. Selecting a server no longer assigns its owner as recipient. Saved owner changes take effect on the next action.
+- Withdrawals process every configured account with a per-account result. Running accounts use the same transfer function as `farmers send`; stopped or paused accounts are reported. One account failure does not abort the rest.
+- Unknown local levels no longer stop the flow after cash lookup. The command is `owo send @recipient amount`. Known limits cap amounts; when OwO explicitly rejects an amount and reports a smaller remaining allowance before confirmation, the transfer retries at that allowance. Recipient limits stop further transfers and report remaining accounts as skipped.
+- Only final receipts count as sent. Uncertain transfers still require reconciliation and are never automatically resent.
+
+After updating, restart the application, save your owner ID under Configuration, stop accounts, and run Create & assign channels once to update existing channel permissions. Then start accounts and use Withdraw available OwO.
+
+Validated with offline protocol and frontend tests. No live Discord channels or transfers were used for validation.
+
+---
+
+The following notes describe earlier versions and are retained as history; the update above supersedes their private-channel, account-verification, server-owner and unknown-level behavior.
+
 # Monitor and account setup fixes
 
 ## Withdrawal display update

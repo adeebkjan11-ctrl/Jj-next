@@ -152,7 +152,10 @@ class Owner(commands.Cog):
             return
         text = payload_text(data)
         if self._cash is not None and not self._cash.done() and self.bot.identity.text_is_mine(text):
-            found = re.search(r'you currently have[^\d]*([\d,]+)', text, re.I)
+            # Emoji IDs are not balances. OwO can decorate amounts in V2/custom replies.
+            plain = re.sub(r'<a?:\w+:\d+>', '', text)
+            plain = re.sub(r'[*`_]', '', plain)
+            found = re.search(r'you currently have\s+([\d,]+)\s+cowoncy', plain, re.I)
             if found:
                 self._cash.set_result(int(found.group(1).replace(',', '')))
         mid = str(data.get('id', ''))
@@ -259,10 +262,10 @@ class Owner(commands.Cog):
                 balance = await asyncio.wait_for(asyncio.shield(self._cash), 45)
                 self.bot.stats.update(current_cash=balance, last_cash_update=time.time())
                 remaining = self._remaining_today()
-                if remaining is None:
-                    return self._status('skipped', reason='Level unknown; configure a fixed limit or refresh the level')
                 pct = max(1, min(100, float(percent if percent is not None else self._config().get('send_percent', 90))))
-                target = min(int(balance * pct / 100), remaining)
+                target = int(balance * pct / 100)
+                if remaining is not None:
+                    target = min(target, remaining)
                 while total < target:
                     if not self.bot.active or self.bot.paused:
                         return self._status('partial' if total else 'skipped', confirmed_total=total, reason='Account paused')
@@ -272,14 +275,24 @@ class Owner(commands.Cog):
                     self._status('sending', amount=self._amount, confirmed_total=total, prompt_id=None,
                                  channel_id=str(self._channel_id))
                     sent = await asyncio.wait_for(self.bot.send_message(
-                        f'{self.bot.prefix}give <@{recipient}> {self._amount}', priority=True,
+                        f'{self.bot.prefix}send <@{recipient}> {self._amount}', priority=True,
                         target_channel_id=self._channel_id), 60)
                     if not sent:
                         return self._status('unknown', reason='Give send failed; check for a receipt before retrying')
                     self._status('awaiting_confirmation')
                     done, _ = await asyncio.wait([self._prompt, self._receipt], timeout=90, return_when=asyncio.FIRST_COMPLETED)
                     if self._receipt in done:
-                        return self._status(**self._receipt.result(), confirmed_total=total)
+                        result = self._receipt.result()
+                        allowance = self._remaining_today()
+                        if (result['status'] == 'limited' and self._prompt_id is None
+                                and allowance is not None and 0 < allowance < self._amount):
+                            # OwO explicitly rejected this amount before creating a
+                            # transfer. Retry only the smaller server-approved amount.
+                            target = min(target, total + allowance)
+                            self._status('limited', confirmed_total=total, reason=result.get('reason'))
+                            await asyncio.sleep(6)
+                            continue
+                        return self._status(**result, confirmed_total=total)
                     if self._prompt not in done:
                         return self._status('unknown', reason='Confirmation prompt not received; no automatic resend')
                     data, custom_id = self._prompt.result()
